@@ -4,134 +4,171 @@
   <meta charset="utf-8">
   <title>Artworks</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    .toolbar {
-      display: grid;
-      gap: 12px;
-      margin-top: 14px;
+    .headerbar{
+      display:flex; justify-content:space-between; align-items:center; gap:14px;
+      flex-wrap:wrap;
     }
-    .toolbar-top {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 14px;
-      flex-wrap: wrap;
+    .header-actions{
+      display:flex; gap:10px; flex-wrap:wrap; align-items:center;
     }
-    .filters {
-      display: grid;
-      grid-template-columns: 1.4fr 1fr 1fr 1fr;
-      gap: 10px;
-    }
-    .filters input, .filters select {
-      width: 100%;
-      padding: 10px 12px;
-      border: 1px solid #ddd;
-      border-radius: 12px;
-      font-family: inherit;
-      font-size: 14px;
-      background: #fff;
-    }
-    .items {
-      display: grid;
-      gap: 12px;
-      margin-top: 14px;
-    }
-    .rowlink { text-decoration: none; color: inherit; }
-    .item {
-      display: grid;
-      grid-template-columns: 84px 1fr auto;
-      gap: 14px;
-      align-items: center;
-      padding: 12px;
-      border: 1px solid #eee;
-      border-radius: 14px;
-      background: #fff;
-    }
-    .item:hover { border-color: #ddd; }
-    .thumb {
-      width: 84px; height: 84px;
-      border-radius: 12px;
-      background: #eaeaea;
-      overflow: hidden;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #777;
-      font-size: 12px;
-    }
-    .thumb img { width: 100%; height: 100%; object-fit: cover; display:block; }
-    .title { font-weight: 700; }
-    .meta { color: #666; font-size: 13px; margin-top: 3px; }
-    .right { display:flex; gap:10px; align-items:center; }
-    .tag {
-      font-size: 12px;
-      padding: 6px 10px;
-      border-radius: 999px;
-      background: #f1f1f1;
-      color: #222;
-      white-space: nowrap;
-    }
-    .muted { color:#777; font-size: 13px; }
-    .countline { display:flex; gap: 10px; align-items:center; flex-wrap:wrap; }
-    .pill {
-      display:inline-block;
-      padding: 6px 10px;
-      border-radius: 999px;
-      background:#f6f6f6;
-      border: 1px solid #eee;
-      color:#333;
-      font-size: 12px;
+    .btn-small{
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid #eee;
+      background:#fff;
+      cursor:pointer;
+      font-family:inherit;
+      font-size:14px;
     }
 
-    @media (max-width: 980px) {
-      .filters { grid-template-columns: 1fr 1fr; }
+    .controls{
+      margin-top:14px;
+      display:grid;
+      gap:12px;
+    }
+    .filters{
+      display:grid;
+      grid-template-columns: 1.6fr 1fr 1fr 1fr;
+      gap:10px;
+    }
+    .filters input, .filters select{
+      width:100%;
+      padding:10px 12px;
+      border:1px solid #ddd;
+      border-radius:12px;
+      font-family:inherit;
+      font-size:14px;
+      background:#fff;
+    }
+    .chips{
+      display:flex; flex-wrap:wrap; gap:10px; align-items:center;
+      color:#666; font-size:13px;
+    }
+    .chip{
+      display:inline-flex; align-items:center; gap:8px;
+      padding:6px 10px;
+      border-radius:999px;
+      background:#f6f6f6;
+      border:1px solid #eee;
+      color:#333;
+      font-size:12px;
+    }
+    .muted{ color:#777; font-size:13px; }
+
+    .items{
+      display:grid;
+      gap:12px;
+      margin-top:14px;
+    }
+    .rowlink{ text-decoration:none; color:inherit; }
+    .item{
+      display:grid;
+      grid-template-columns: 86px 1fr auto;
+      gap:14px;
+      align-items:center;
+      padding:12px;
+      border:1px solid #eee;
+      border-radius:14px;
+      background:#fff;
+    }
+    .item:hover{ border-color:#ddd; }
+    .thumb{
+      width:86px; height:86px;
+      border-radius:12px;
+      background:#eaeaea;
+      overflow:hidden;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:12px;
+      color:#777;
+    }
+    .thumb img{ width:100%; height:100%; object-fit:cover; display:block; }
+    .title{ font-weight:700; }
+    .meta{ margin-top:3px; font-size:13px; color:#666; }
+    .right{
+      display:flex;
+      gap:10px;
+      align-items:center;
+    }
+    .tag{
+      font-size:12px;
+      padding:6px 10px;
+      border-radius:999px;
+      background:#f1f1f1;
+      color:#222;
+      white-space:nowrap;
+    }
+
+    /* Print styles */
+    @media print {
+      .header-actions,
+      .controls,
+      .back,
+      .btn,
+      .btn-small { display:none !important; }
+      .card { box-shadow:none !important; border:none !important; }
+      .item { break-inside: avoid; }
+      .rowlink { text-decoration:none !important; }
+      .tag { display:none !important; }
+    }
+
+    @media (max-width: 980px){
+      .filters{ grid-template-columns: 1fr 1fr; }
+      .item{ grid-template-columns: 76px 1fr; }
+      .right{ justify-content:flex-start; }
     }
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="card">
-      <div class="toolbar-top">
+
+      <div class="headerbar">
         <h2 style="margin:0;">Artworks</h2>
-        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <div class="header-actions">
           <a class="btn" href="{{ url_for('add_artwork') }}">Add artwork</a>
+          <button class="btn-small" id="printBtn" type="button">Print page</button>
         </div>
       </div>
 
       {% set mediums = artworks | map(attribute='medium') | select | list %}
       {% set years = artworks | map(attribute='year') | select | list %}
-      {% set series_list = artworks | map(attribute='series') | select | list %}
+      {% set projects = artworks | map(attribute='series') | select | list %}
 
-      <div class="toolbar">
+      <div class="controls">
         <div class="filters">
-          <input id="searchInput" type="search" placeholder="Search title, medium, project, year, ID…">
+          <input id="q" type="search" placeholder="Search title, medium, project, year, ID…">
 
-          <select id="mediumFilter">
-            <option value="">All materials (medium)</option>
+          <select id="fMedium">
+            <option value="">All materials</option>
             {% for m in mediums|unique|sort %}
               <option value="{{ m|e }}">{{ m }}</option>
             {% endfor %}
           </select>
 
-          <select id="yearFilter">
-            <option value="">All years</option>
+          <select id="fYear">
+            <option value="">All dates</option>
             {% for y in years|unique|sort %}
               <option value="{{ y|e }}">{{ y }}</option>
             {% endfor %}
           </select>
 
-          <select id="seriesFilter">
+          <select id="fProject">
             <option value="">All projects</option>
-            {% for s in series_list|unique|sort %}
-              <option value="{{ s|e }}">{{ s }}</option>
+            {% for p in projects|unique|sort %}
+              <option value="{{ p|e }}">{{ p }}</option>
             {% endfor %}
           </select>
         </div>
 
-        <div class="countline">
-          <span class="pill">Total: <strong id="totalCount">{{ artworks|length }}</strong></span>
-          <span class="pill">Shown: <strong id="shownCount">{{ artworks|length }}</strong></span>
-          <span class="muted" id="activeFilters"></span>
+        <div class="chips">
+          <span class="chip">Total: <strong id="total">{{ artworks|length }}</strong></span>
+          <span class="chip">Shown: <strong id="shown">{{ artworks|length }}</strong></span>
+          <button class="btn-small" id="resetBtn" type="button">Reset</button>
+          <span class="muted" id="activeText"></span>
         </div>
       </div>
 
@@ -142,7 +179,7 @@
                href="{{ url_for('artwork_detail', artwork_id=artwork.id) }}"
                data-medium="{{ (artwork.medium or '')|lower|e }}"
                data-year="{{ (artwork.year or '')|lower|e }}"
-               data-series="{{ (artwork.series or '')|lower|e }}"
+               data-project="{{ (artwork.series or '')|lower|e }}"
                data-search="{{ (
                  (artwork.title or '') ~ ' ' ~
                  (artwork.medium or '') ~ ' ' ~
@@ -163,9 +200,9 @@
                 <div>
                   <div class="title">{{ artwork.title }}</div>
                   <div class="meta">
-                    {{ artwork.year or "—" }} · {{ artwork.medium or "—" }} ·
-                    {% if artwork.series %}{{ artwork.series }} ·{% endif %}
-                    ID {{ artwork.id }}
+                    {{ artwork.year or "—" }} · {{ artwork.medium or "—" }}
+                    {% if artwork.series %} · {{ artwork.series }}{% endif %}
+                    · ID {{ artwork.id }}
                   </div>
                 </div>
 
@@ -192,65 +229,74 @@
   </div>
 
   <script>
-    (function () {
-      const searchInput = document.getElementById('searchInput');
-      const mediumFilter = document.getElementById('mediumFilter');
-      const yearFilter = document.getElementById('yearFilter');
-      const seriesFilter = document.getElementById('seriesFilter');
+    (function(){
+      const q = document.getElementById('q');
+      const fMedium = document.getElementById('fMedium');
+      const fYear = document.getElementById('fYear');
+      const fProject = document.getElementById('fProject');
 
-      const itemsWrap = document.getElementById('items');
+      const items = document.getElementById('items');
       const emptyState = document.getElementById('emptyState');
 
-      const shownCount = document.getElementById('shownCount');
-      const activeFilters = document.getElementById('activeFilters');
+      const shown = document.getElementById('shown');
+      const activeText = document.getElementById('activeText');
+      const resetBtn = document.getElementById('resetBtn');
+      const printBtn = document.getElementById('printBtn');
 
-      function norm(v) {
-        return (v || '').toString().trim().toLowerCase();
-      }
+      const norm = (v) => (v || '').toString().trim().toLowerCase();
 
-      function update() {
-        if (!itemsWrap) return;
+      function apply(){
+        if (!items) return;
 
-        const q = norm(searchInput.value);
-        const m = norm(mediumFilter.value);
-        const y = norm(yearFilter.value);
-        const s = norm(seriesFilter.value);
-
-        let shown = 0;
+        const qs = norm(q.value);
+        const m = norm(fMedium.value);
+        const y = norm(fYear.value);
+        const p = norm(fProject.value);
 
         const active = [];
-        if (q) active.push(`Search: “${searchInput.value.trim()}”`);
-        if (m) active.push(`Medium: ${mediumFilter.value}`);
-        if (y) active.push(`Year: ${yearFilter.value}`);
-        if (s) active.push(`Project: ${seriesFilter.value}`);
-        activeFilters.textContent = active.length ? active.join(" · ") : "";
+        if (qs) active.push(`Search: “${q.value.trim()}”`);
+        if (m) active.push(`Material: ${fMedium.value}`);
+        if (y) active.push(`Date: ${fYear.value}`);
+        if (p) active.push(`Project: ${fProject.value}`);
+        activeText.textContent = active.length ? active.join(' · ') : '';
 
-        const links = itemsWrap.querySelectorAll('a.rowlink');
-        links.forEach(link => {
-          const ds = link.dataset;
+        let count = 0;
+        const rows = items.querySelectorAll('a.rowlink');
 
-          const okSearch = !q || (ds.search || '').includes(q);
+        rows.forEach(row => {
+          const ds = row.dataset;
+          const okSearch = !qs || (ds.search || '').includes(qs);
           const okM = !m || (ds.medium || '') === m;
           const okY = !y || (ds.year || '') === y;
-          const okS = !s || (ds.series || '') === s;
+          const okP = !p || (ds.project || '') === p;
 
-          const ok = okSearch && okM && okY && okS;
-
-          link.style.display = ok ? '' : 'none';
-          if (ok) shown += 1;
+          const ok = okSearch && okM && okY && okP;
+          row.style.display = ok ? '' : 'none';
+          if (ok) count += 1;
         });
 
-        shownCount.textContent = String(shown);
-        if (emptyState) emptyState.style.display = shown === 0 ? '' : 'none';
+        shown.textContent = String(count);
+        if (emptyState) emptyState.style.display = count === 0 ? '' : 'none';
       }
 
-      [searchInput, mediumFilter, yearFilter, seriesFilter].forEach(el => {
+      function reset(){
+        q.value = '';
+        fMedium.value = '';
+        fYear.value = '';
+        fProject.value = '';
+        apply();
+      }
+
+      [q, fMedium, fYear, fProject].forEach(el => {
         if (!el) return;
-        el.addEventListener('input', update);
-        el.addEventListener('change', update);
+        el.addEventListener('input', apply);
+        el.addEventListener('change', apply);
       });
 
-      update();
+      if (resetBtn) resetBtn.addEventListener('click', reset);
+      if (printBtn) printBtn.addEventListener('click', function(){ window.print(); });
+
+      apply();
     })();
   </script>
 </body>
