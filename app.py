@@ -151,6 +151,9 @@ def artwork_detail(artwork_id):
     latest = current_location(artwork.id)
     return render_template("artwork_detail.html", artwork=artwork, latest=latest)
 
+with app.app_context():
+    db.create_all()
+
 
 # --------------------------------------------------
 # Routes – create & edit
