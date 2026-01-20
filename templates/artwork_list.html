@@ -22,7 +22,8 @@
 
               <div class="artwork-thumb">
                 {% if art.image_filename %}
-                  <img src="{{ url_for('static', filename='uploads/' ~ art.image_filename) }}">
+                  <img src="{{ url_for('uploaded_file', filename=artwork.image_filename) }}">
+
                 {% endif %}
               </div>
 
