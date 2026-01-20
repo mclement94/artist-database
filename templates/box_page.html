@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>What’s in the box — {{ artwork.title }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <style>
+    .layout { display:grid; grid-template-columns: 320px 1fr; gap: 24px; }
+    .imgbox { background:#eaeaea; border-radius:14px; overflow:hidden; min-height:220px; }
+    .imgbox img { width:100%; height:auto; display:block; }
+    .grid { display:grid; grid-template-columns: 160px 1fr; gap: 10px 16px; margin-top: 10px; }
+    .k { font-weight:600; color:#222; }
+    .v { color:#111; word-break: break-word; }
+    .empty { color:#999; font-style: italic; }
+    .section { margin-top: 18px; padding-top: 16px; border-top: 1px solid #eee; }
+    input, textarea { width:100%; padding:10px; border:1px solid #ccc; border-radius:8px; font-family:inherit; }
+    .msg { padding:10px 12px; border-radius:10px; margin: 12px 0; }
+    .ok { background:#eef9ee; }
+    .err { background:#fdecec; }
+    @media (max-width: 920px) { .layout { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h2 style="margin-bottom:10px;">What’s in the box</h2>
+      <p><strong>{{ artwork.title }}</strong> {% if artwork.year %}({{ artwork.year }}){% endif %}</p>
+
+      <div class="layout">
+        <div>
+          <div class="imgbox">
+            {% if artwork.image_filename %}
+              <!-- IMPORTANT: this uses the /uploads route, not static/uploads -->
+              <img src="{{ url_for('uploaded_file', filename=artwork.image_filename) }}" alt="Artwork image">
+            {% endif %}
+          </div>
+
+          <div class="section">
+            <div class="k" style="margin-bottom:6px;">Current location</div>
+            <div class="v">
+              {% if latest %}
+                {{ latest.location }}
+              {% else %}
+                <span class="empty">—</span>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="grid">
+            <div class="k">Artwork ID</div>
+            <div class="v">{{ artwork.id }}</div>
+
+            <div class="k">Year</div>
+            <div class="v">{% if artwork.year %}{{ artwork.year }}{% else %}<span class="empty">—</span>{% endif %}</div>
+
+            <div class="k">Series / Project</div>
+            <div class="v">{% if artwork.series %}{{ artwork.series }}{% else %}<span class="empty">—</span>{% endif %}</div>
+
+            <div class="k">Medium</div>
+            <div class="v">{% if artwork.medium %}{{ artwork.medium }}{% else %}<span class="empty">—</span>{% endif %}</div>
+
+            <div class="k">Dimensions</div>
+            <div class="v">{% if artwork.dimensions %}{{ artwork.dimensions }}{% else %}<span class="empty">—</span>{% endif %}</div>
+
+            <div class="k">Edition type</div>
+            <div class="v">{% if artwork.edition_type %}{{ artwork.edition_type }}{% else %}<span class="empty">—</span>{% endif %}</div>
+
+            <div class="k">Edition info</div>
+            <div class="v">{% if artwork.edition_info %}{{ artwork.edition_info }}{% else %}<span class="empty">—</span>{% endif %}</div>
+
+            <div class="k">For sale</div>
+            <div class="v">
+              {% if artwork.for_sale %}
+                Yes{% if artwork.price %} ({{ artwork.price }}){% endif %}
+              {% else %}
+                No
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="k" style="margin-bottom:6px;">Description</div>
+            <div class="v">{% if artwork.description %}{{ artwork.description }}{% else %}<span class="empty">—</span>{% endif %}</div>
+          </div>
+
+          <div class="section">
+            <div class="k" style="margin-bottom:6px;">Notes</div>
+            <div class="v">{% if artwork.notes %}{{ artwork.notes }}{% else %}<span class="empty">—</span>{% endif %}</div>
+          </div>
+
+          <div class="section">
+            <div class="k" style="margin-bottom:10px;">Location history</div>
+
+            {% if history and history|length > 0 %}
+              <div style="display:grid; gap:10px;">
+                {% for item in history %}
+                  <div style="padding:10px 12px; border:1px solid #eee; border-radius:12px;">
+                    <div><strong>{{ item.location }}</strong></div>
+                    <div style="color:#666; font-size:13px;">
+                      {{ item.changed_at.strftime('%Y-%m-%d %H:%M') }}
+                    </div>
+                    {% if item.note %}
+                      <div style="margin-top:6px;">{{ item.note }}</div>
+                    {% endif %}
+                  </div>
+                {% endfor %}
+              </div>
+            {% else %}
+              <div class="empty">—</div>
+            {% endif %}
+          </div>
+
+          <div class="section">
+            <div class="k" style="margin-bottom:10px;">Update location</div>
+
+            {% if token_error %}
+              <div class="msg err">{{ token_error }}</div>
+            {% endif %}
+
+            {% if success %}
+              <div class="msg ok">Saved. You can close this page.</div>
+            {% endif %}
+
+            {% if error %}
+              <div class="msg err">{{ error }}</div>
+            {% endif %}
+
+            {% if can_update %}
+              <form method="post" action="{{ url_for('box_page', artwork_id=artwork.id, token=token) }}">
+                <p>
+                  <label>New location</label><br>
+                  <input name="location" placeholder="e.g. Studio / Storage A / Gallery / Loan to …">
+                </p>
+
+                <p>
+                  <label>Note (optional)</label><br>
+                  <textarea name="note" rows="3" placeholder="e.g. packed, condition OK, shipped date..."></textarea>
+                </p>
+
+                <button class="btn" type="submit">Save location</button>
+              </form>
+            {% else %}
+              <div class="empty">Scan the QR code on the box to enable location updates.</div>
+            {% endif %}
+          </div>
+
+        </div>
+      </div>
+
+      <a class="back" href="{{ url_for('artwork_detail', artwork_id=artwork.id) }}">← Back to artwork</a>
+    </div>
+  </div>
+</body>
+</html>
