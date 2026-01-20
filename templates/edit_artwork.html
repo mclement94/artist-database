@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Edit artwork</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <style>
+    .form {
+      max-width: 760px;
+    }
+
+    .row {
+      margin-bottom: 18px;
+    }
+
+    .row.split {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+
+    label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    input,
+    textarea,
+    select {
+      width: 100%;
+      padding: 9px 11px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      font-family: inherit;
+      font-size: 14px;
+    }
+
+    textarea {
+      resize: vertical;
+    }
+
+    .image-block img {
+      max-width: 260px;
+      border-radius: 12px;
+      margin-bottom: 10px;
+    }
+
+    .muted {
+      font-size: 13px;
+      color: #777;
+    }
+
+    .actions {
+      display: flex;
+      gap: 14px;
+      margin-top: 28px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card form">
+
+      <h2>Edit artwork</h2>
+
+      <form method="post" enctype="multipart/form-data">
+
+        <div class="row">
+          <label>Title *</label>
+          <input name="title" value="{{ artwork.title }}" required>
+        </div>
+
+        <div class="row split">
+          <div>
+            <label>Year</label>
+            <input name="year" value="{{ artwork.year }}">
+          </div>
+
+          <div>
+            <label>Series / Project</label>
+            <input name="series" value="{{ artwork.series }}">
+          </div>
+        </div>
+
+        <div class="row split">
+          <div>
+            <label>Medium *</label>
+            <input name="medium" value="{{ artwork.medium }}" required>
+          </div>
+
+          <div>
+            <label>Dimensions</label>
+            <input name="dimensions" value="{{ artwork.dimensions }}">
+          </div>
+        </div>
+
+        <div class="row split">
+          <div>
+            <label>Edition type</label>
+            <select name="edition_type">
+              <option value="">—</option>
+              <option value="Unique" {% if artwork.edition_type == "Unique" %}selected{% endif %}>Unique</option>
+              <option value="Editioned" {% if artwork.edition_type == "Editioned" %}selected{% endif %}>Editioned</option>
+              <option value="AP" {% if artwork.edition_type == "AP" %}selected{% endif %}>AP</option>
+            </select>
+          </div>
+
+          <div>
+            <label>Edition info</label>
+            <input name="edition_info" value="{{ artwork.edition_info }}">
+          </div>
+        </div>
+
+        <div class="row split">
+          <div>
+            <label>For sale?</label>
+            <select name="for_sale">
+              <option value="no" {% if not artwork.for_sale %}selected{% endif %}>No</option>
+              <option value="yes" {% if artwork.for_sale %}selected{% endif %}>Yes</option>
+            </select>
+          </div>
+
+          <div>
+            <label>Price</label>
+            <input name="price" value="{{ artwork.price }}">
+          </div>
+        </div>
+
+        <div class="row">
+          <label>Description</label>
+          <textarea name="description" rows="4">{{ artwork.description }}</textarea>
+        </div>
+
+        <div class="row">
+          <label>Notes (internal)</label>
+          <textarea name="notes" rows="3">{{ artwork.notes }}</textarea>
+        </div>
+
+        <div class="row image-block">
+          <label>Image</label>
+
+          {% if artwork.image_filename %}
+            <img src="{{ url_for('static', filename='uploads/' ~ artwork.image_filename) }}">
+            <div class="muted">Uploading a new image will replace the current one.</div>
+          {% else %}
+            <div class="muted">No image uploaded yet.</div>
+          {% endif %}
+
+          <input type="file" name="image" accept="image/*">
+        </div>
+
+        <div class="actions">
+          <button class="btn" type="submit">Save changes</button>
+          <a class="btn" href="{{ url_for('artwork_detail', artwork_id=artwork.id) }}">Cancel</a>
+        </div>
+
+      </form>
+
+    </div>
+  </div>
+</body>
+</html>

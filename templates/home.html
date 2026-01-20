@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Artwork Archive</title>
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Artwork Archive</h1>
+      <p>Select what you want to do:</p>
+
+      <div class="grid">
+        <a class="btn" href="{{ url_for('add_artwork') }}">Add artwork</a>
+        <a class="btn" href="{{ url_for('artwork_list') }}">View artworks</a>
+      </div>
+
+      <div class="hint">
+        Certificates and editing are available per artwork.
+      </div>
+    </div>
+  </div>
+</body>
+</html>

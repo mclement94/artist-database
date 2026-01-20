@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{{ artwork.title }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <style>
+    .layout {
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      gap: 26px;
+      align-items: start;
+    }
+    .imgbox {
+      background: #eaeaea;
+      border-radius: 14px;
+      overflow: hidden;
+      min-height: 220px;
+    }
+    .imgbox img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    .badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 7px 10px;
+      border-radius: 999px;
+      background: #f1f1f1;
+      font-size: 13px;
+      color: #333;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 170px 1fr;
+      gap: 10px 16px;
+      margin-top: 8px;
+    }
+    .k {
+      font-weight: 600;
+      color: #222;
+    }
+    .v {
+      color: #111;
+      word-break: break-word;
+    }
+    .empty {
+      color: #999;
+      font-style: italic;
+    }
+    .section {
+      margin-top: 22px;
+      padding-top: 18px;
+      border-top: 1px solid #eee;
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 18px;
+    }
+    .btn.secondary {
+      background: #f1f1f1;
+      color: #111;
+    }
+    @media (max-width: 920px) {
+      .layout { grid-template-columns: 1fr; }
+      .grid { grid-template-columns: 150px 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+
+      <h2 style="margin-bottom:10px;">{{ artwork.title }}</h2>
+
+      <div class="layout">
+
+        <!-- Left: image + badges -->
+        <div>
+          <div class="imgbox">
+            {% if artwork.image_filename %}
+              <img src="{{ url_for('static', filename='uploads/' ~ artwork.image_filename) }}" alt="Artwork image">
+            {% endif %}
+          </div>
+
+          <div class="badges">
+            <span class="badge">Artwork ID: {{ artwork.id }}</span>
+            <span class="badge">Created: {{ artwork.created_at.strftime('%Y-%m-%d') }}</span>
+          </div>
+        </div>
+
+        <!-- Right: metadata -->
+        <div>
+
+          <div class="grid">
+            <div class="k">Year</div>
+            <div class="v">
+              {% if artwork.year %}{{ artwork.year }}{% else %}<span class="empty">—</span>{% endif %}
+            </div>
+
+            <div class="k">Series / Project</div>
+            <div class="v">
+              {% if artwork.series %}{{ artwork.series }}{% else %}<span class="empty">—</span>{% endif %}
+            </div>
+
+            <div class="k">Medium</div>
+            <div class="v">
+              {% if artwork.medium %}{{ artwork.medium }}{% else %}<span class="empty">—</span>{% endif %}
+            </div>
+
+            <div class="k">Dimensions</div>
+            <div class="v">
+              {% if artwork.dimensions %}{{ artwork.dimensions }}{% else %}<span class="empty">—</span>{% endif %}
+            </div>
+
+            <div class="k">Edition type</div>
+            <div class="v">
+              {% if artwork.edition_type %}{{ artwork.edition_type }}{% else %}<span class="empty">—</span>{% endif %}
+            </div>
+
+            <div class="k">Edition info</div>
+            <div class="v">
+              {% if artwork.edition_info %}{{ artwork.edition_info }}{% else %}<span class="empty">—</span>{% endif %}
+            </div>
+
+            <div class="k">For sale</div>
+            <div class="v">
+              {% if artwork.for_sale %}
+                Yes{% if artwork.price %} ({{ artwork.price }}){% endif %}
+              {% else %}
+                No
+              {% endif %}
+            </div>
+
+            <div class="k">Current location</div>
+            <div class="v">
+              {% if latest %}
+                {{ latest.location }}
+              {% else %}
+                <span class="empty">—</span>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="k" style="margin-bottom:6px;">Description</div>
+            <div class="v">
+              {% if artwork.description %}
+                {{ artwork.description }}
+              {% else %}
+                <span class="empty">—</span>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="k" style="margin-bottom:6px;">Notes (internal)</div>
+            <div class="v">
+              {% if artwork.notes %}
+                {{ artwork.notes }}
+              {% else %}
+                <span class="empty">—</span>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="actions">
+            <a class="btn" href="{{ url_for('edit_artwork', artwork_id=artwork.id) }}">Edit artwork</a>
+
+            <a class="btn" href="{{ url_for('certificate_pdf', artwork_id=artwork.id) }}" target="_blank">
+              View certificate (PDF)
+            </a>
+
+            <a class="btn" href="{{ url_for('box_label_pdf', artwork_id=artwork.id) }}" target="_blank">
+              Print box label (PDF + QR)
+            </a>
+
+            <a class="btn secondary" href="{{ url_for('box_page', artwork_id=artwork.id) }}">
+              What’s in the box
+            </a>
+          </div>
+
+          <a class="back" href="{{ url_for('artwork_list') }}">← Back to list</a>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+</body>
+</html>

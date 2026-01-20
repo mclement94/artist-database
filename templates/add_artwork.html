@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Add artwork</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h2>Add artwork</h2>
+
+      <form method="post" enctype="multipart/form-data">
+        <p>
+          <label>Title *</label><br>
+          <input required name="title" style="width:100%">
+        </p>
+
+        <p>
+          <label>Year</label><br>
+          <input name="year">
+        </p>
+
+        <p>
+          <label>Series / Project</label><br>
+          <input name="series" style="width:100%">
+        </p>
+
+        <p>
+          <label>Medium *</label><br>
+          <input required name="medium" style="width:100%">
+        </p>
+
+        <p>
+          <label>Dimensions</label><br>
+          <input name="dimensions" style="width:100%">
+        </p>
+
+        <p>
+          <label>Description</label><br>
+          <textarea name="description" rows="4" style="width:100%"></textarea>
+        </p>
+
+        <p>
+          <label>Edition type</label><br>
+          <select name="edition_type">
+            <option value="">—</option>
+            <option>Unique</option>
+            <option>Editioned</option>
+            <option>AP</option>
+          </select>
+        </p>
+
+        <p>
+          <label>Edition info</label><br>
+          <input name="edition_info" placeholder="e.g. 3/10">
+        </p>
+
+        <p>
+          <label>For sale?</label><br>
+          <select name="for_sale">
+            <option value="no">No</option>
+            <option value="yes">Yes</option>
+          </select>
+        </p>
+
+        <p>
+          <label>Price</label><br>
+          <input name="price">
+        </p>
+
+        <p>
+          <label>Notes (internal)</label><br>
+          <textarea name="notes" rows="3" style="width:100%"></textarea>
+        </p>
+
+        <p>
+          <label>Image</label><br>
+          <input type="file" name="image" accept="image/*">
+        </p>
+
+        <button class="btn" type="submit">Save artwork</button>
+      </form>
+
+      <a class="back" href="/">← Back</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Artworks</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+
+      <div class="no-print" style="display:flex; justify-content:space-between; align-items:center;">
+        <h2>Artworks</h2>
+        <button class="btn" onclick="window.print()">Print list</button>
+      </div>
+
+      {% if artworks %}
+        <div class="artwork-list">
+          {% for art in artworks %}
+            <div class="artwork-item clickable"
+                 onclick="window.location='{{ url_for('artwork_detail', artwork_id=art.id) }}'">
+
+              <div class="artwork-thumb">
+                {% if art.image_filename %}
+                  <img src="{{ url_for('static', filename='uploads/' ~ art.image_filename) }}">
+                {% endif %}
+              </div>
+
+              <div class="artwork-meta">
+                <strong>{{ art.title }}</strong>
+                {% if art.year %} ({{ art.year }}){% endif %}<br>
+
+                <small>{{ art.medium }}</small><br>
+
+                {% if art.series %}
+                  <small>Series: {{ art.series }}</small><br>
+                {% endif %}
+
+                {% if art.edition_info %}
+                  <small>Edition: {{ art.edition_info }}</small><br>
+                {% endif %}
+
+                {% if art.for_sale %}
+                  <small><strong>For sale{% if art.price %}: {{ art.price }}{% endif %}</strong></small>
+                {% endif %}
+              </div>
+
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p>No artworks yet.</p>
+      {% endif %}
+
+      <a class="back no-print" href="{{ url_for('home') }}">← Back to home</a>
+
+    </div>
+  </div>
+</body>
+</html>

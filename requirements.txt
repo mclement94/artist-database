@@ -1,0 +1,6 @@
+flask
+flask-sqlalchemy
+reportlab
+qrcode[pil]
+itsdangerous
+gunicorn

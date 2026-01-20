@@ -1,0 +1,156 @@
+/* --------------------------------------------------
+   Base
+-------------------------------------------------- */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  background: #f6f6f6;
+  color: #111;
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+/* --------------------------------------------------
+   Layout
+-------------------------------------------------- */
+
+.wrap {
+  max-width: 1000px;
+  margin: 60px auto;
+  padding: 0 24px;
+}
+
+.card {
+  background: #fff;
+  border-radius: 16px;
+  padding: 28px;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.08);
+}
+
+/* --------------------------------------------------
+   Typography
+-------------------------------------------------- */
+
+h1, h2 {
+  margin: 0 0 12px;
+  font-weight: 600;
+}
+
+p {
+  margin: 0 0 16px;
+  color: #444;
+}
+
+small {
+  color: #666;
+}
+
+/* --------------------------------------------------
+   Buttons & links
+-------------------------------------------------- */
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.btn {
+  display: inline-block;
+  padding: 12px 18px;
+  border-radius: 14px;
+  background: #111;
+  color: #fff;
+  font-size: 14px;
+  border: none;
+  cursor: pointer;
+}
+
+.btn:hover {
+  opacity: 0.9;
+}
+
+.back {
+  display: inline-block;
+  margin-top: 24px;
+  font-size: 14px;
+}
+
+/* --------------------------------------------------
+   Artwork list
+-------------------------------------------------- */
+
+.artwork-list {
+  margin-top: 20px;
+}
+
+.artwork-item {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 18px;
+  padding: 14px;
+  border-radius: 12px;
+  transition: background 0.15s ease;
+}
+
+.artwork-item + .artwork-item {
+  border-top: 1px solid #eee;
+}
+
+.artwork-item.clickable {
+  cursor: pointer;
+}
+
+.artwork-item.clickable:hover {
+  background: #f3f3f3;
+}
+
+.artwork-thumb {
+  width: 140px;
+  height: 100px;
+  background: #eaeaea;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.artwork-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.artwork-meta strong {
+  font-size: 16px;
+}
+
+/* --------------------------------------------------
+   Print
+-------------------------------------------------- */
+
+@media print {
+  body {
+    background: #fff;
+  }
+
+  .btn,
+  .back,
+  .no-print {
+    display: none !important;
+  }
+
+  .card {
+    box-shadow: none;
+    padding: 0;
+  }
+
+  .artwork-item {
+    page-break-inside: avoid;
+  }
+}
