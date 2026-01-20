@@ -9,42 +9,43 @@ from flask import (
     redirect,
     url_for,
     send_file,
+    send_from_directory,
 )
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
 
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
-
 import qrcode
 
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import mm
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import Paragraph
 from reportlab.lib.utils import ImageReader
-from flask import send_from_directory
-
 
 # --------------------------------------------------
-# Configuration
+# Basic config
 # --------------------------------------------------
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
-ARTIST_NAME = "Your Name"  # <-- change this
-ALLOWED_EXTENSIONS = {"jpg", "jpeg"}  # JPG only as you requested
+DATA_DIR = os.environ.get("DATA_DIR", BASE_DIR)
+os.makedirs(DATA_DIR, exist_ok=True)
+
+UPLOAD_DIR = os.path.join(DATA_DIR, "uploads")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+DB_PATH = os.path.join(DATA_DIR, "database.db")
+
+ALLOWED_EXTENSIONS = {"jpg", "jpeg"}
+ARTIST_NAME = "Mattis Clement"
 
 app = Flask(__name__)
 app.config.update(
-    SECRET_KEY=os.environ.get("SECRET_KEY", "dev-change-this-to-a-random-long-string"),
-    SQLALCHEMY_DATABASE_URI="sqlite:///" + os.path.join(BASE_DIR, "database.db"),
+    SECRET_KEY=os.environ.get("SECRET_KEY", "dev-change-me"),
+    SQLALCHEMY_DATABASE_URI="sqlite:///" + DB_PATH,
     SQLALCHEMY_TRACK_MODIFICATIONS=False,
-    UPLOAD_FOLDER=os.path.join(BASE_DIR, "static", "uploads"),
-    MAX_CONTENT_LENGTH=10 * 1024 * 1024,  # 10MB
+    UPLOAD_FOLDER=UPLOAD_DIR,
 )
-
-os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
 db = SQLAlchemy(app)
 
@@ -53,34 +54,31 @@ db = SQLAlchemy(app)
 # --------------------------------------------------
 
 
-def allowed_file(filename: str) -> bool:
+def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
-def save_image(file) -> str:
-    safe_name = secure_filename(file.filename)
-    timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
-    filename = f"{timestamp}_{safe_name}"
-    path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
-    file.save(path)
-    return filename
+def save_image(file):
+    filename = secure_filename(file.filename)
+    ts = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    final = f"{ts}_{filename}"
+    file.save(os.path.join(app.config["UPLOAD_FOLDER"], final))
+    return final
 
 
 def serializer():
-    # token signer for QR actions
     return URLSafeTimedSerializer(app.config["SECRET_KEY"], salt="box-token")
 
 
-def make_box_token(artwork_id: int) -> str:
+def make_box_token(artwork_id):
     return serializer().dumps({"artwork_id": artwork_id})
 
 
-def verify_box_token(token: str, max_age_seconds: int = 60 * 60 * 24 * 365 * 5):
-    # 5 years by default (you can reprint labels anytime)
-    return serializer().loads(token, max_age=max_age_seconds)
+def verify_box_token(token, max_age=60 * 60 * 24 * 365 * 5):
+    return serializer().loads(token, max_age=max_age)
 
 
-def current_location(artwork_id: int):
+def current_location(artwork_id):
     return (
         LocationLog.query.filter_by(artwork_id=artwork_id)
         .order_by(LocationLog.changed_at.desc())
@@ -94,8 +92,6 @@ def current_location(artwork_id: int):
 
 
 class Artwork(db.Model):
-    __tablename__ = "artworks"
-
     id = db.Column(db.Integer, primary_key=True)
 
     title = db.Column(db.String(200), nullable=False)
@@ -114,21 +110,31 @@ class Artwork(db.Model):
     notes = db.Column(db.Text)
 
     image_filename = db.Column(db.String(255))
-
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
 class LocationLog(db.Model):
-    __tablename__ = "location_logs"
-
     id = db.Column(db.Integer, primary_key=True)
-    artwork_id = db.Column(db.Integer, db.ForeignKey("artworks.id"), nullable=False)
+    artwork_id = db.Column(db.Integer, db.ForeignKey("artwork.id"), nullable=False)
 
     location = db.Column(db.String(200), nullable=False)
     note = db.Column(db.Text)
-    changed_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    changed_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    artwork = db.relationship("Artwork", backref=db.backref("location_logs", lazy=True))
+    artwork = db.relationship("Artwork", backref="location_logs")
+
+
+# --------------------------------------------------
+# Init DB (important for Render)
+# --------------------------------------------------
+
+with app.app_context():
+    db.create_all()
+
+# --------------------------------------------------
+# Static serving for uploads
+# --------------------------------------------------
+
 
 @app.route("/uploads/<path:filename>")
 def uploaded_file(filename):
@@ -136,7 +142,7 @@ def uploaded_file(filename):
 
 
 # --------------------------------------------------
-# Routes – navigation
+# Pages
 # --------------------------------------------------
 
 
@@ -157,12 +163,9 @@ def artwork_detail(artwork_id):
     latest = current_location(artwork.id)
     return render_template("artwork_detail.html", artwork=artwork, latest=latest)
 
-with app.app_context():
-    db.create_all()
-
 
 # --------------------------------------------------
-# Routes – create & edit
+# Create / Edit
 # --------------------------------------------------
 
 
@@ -171,7 +174,10 @@ def add_artwork():
     if request.method == "POST":
         image = request.files.get("image")
         image_filename = None
-        if image and image.filename and allowed_file(image.filename):
+
+        if image and image.filename:
+            if not allowed_file(image.filename):
+                return "Only JPG/JPEG allowed", 400
             image_filename = save_image(image)
 
         artwork = Artwork(
@@ -213,7 +219,9 @@ def edit_artwork(artwork_id):
         artwork.notes = request.form.get("notes")
 
         image = request.files.get("image")
-        if image and image.filename and allowed_file(image.filename):
+        if image and image.filename:
+            if not allowed_file(image.filename):
+                return "Only JPG/JPEG allowed", 400
             artwork.image_filename = save_image(image)
 
         db.session.commit()
@@ -223,8 +231,7 @@ def edit_artwork(artwork_id):
 
 
 # --------------------------------------------------
-# Box page – "What's in the box" (+ location history)
-# QR code links here. Token unlocks update form.
+# Box page (QR target)
 # --------------------------------------------------
 
 
@@ -236,31 +243,32 @@ def box_page(artwork_id):
     can_update = False
     token_error = None
 
-    # Validate token (required for updating location)
     if token:
         try:
             data = verify_box_token(token)
-            can_update = (data.get("artwork_id") == artwork_id)
-            if not can_update:
-                token_error = "Invalid QR token for this artwork."
-        except SignatureExpired:
-            token_error = "This QR token has expired."
-        except BadSignature:
-            token_error = "Invalid QR token."
+            can_update = data.get("artwork_id") == artwork_id
+        except (BadSignature, SignatureExpired):
+            token_error = "Invalid or expired QR code."
 
-    # Handle location update (only if token is valid)
     success = False
     error = None
+
     if request.method == "POST":
         if not can_update:
-            error = "Not authorized to update location (scan the QR code on the box)."
+            error = "Not authorised."
         else:
-            location = (request.form.get("location") or "").strip()
-            note = (request.form.get("note") or "").strip()
+            location = request.form.get("location", "").strip()
+            note = request.form.get("note", "").strip()
             if not location:
-                error = "Location is required."
+                error = "Location required."
             else:
-                db.session.add(LocationLog(artwork_id=artwork.id, location=location, note=note))
+                db.session.add(
+                    LocationLog(
+                        artwork_id=artwork.id,
+                        location=location,
+                        note=note,
+                    )
+                )
                 db.session.commit()
                 success = True
 
@@ -285,8 +293,7 @@ def box_page(artwork_id):
 
 
 # --------------------------------------------------
-# PDFs – Certificate (with image) & Box label (QR)
-# Both displayed inline in browser
+# PDFs
 # --------------------------------------------------
 
 
@@ -296,178 +303,63 @@ def certificate_pdf(artwork_id):
 
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
-    width, height = A4
+    w, h = A4
+    y = h - 40 * mm
 
-    margin_x = 30 * mm
-    y = height - 35 * mm
-
-    # Title
     c.setFont("Helvetica-Bold", 22)
-    c.drawCentredString(width / 2, y, "Certificate of Authenticity")
-    y -= 18 * mm
+    c.drawCentredString(w / 2, y, "Certificate of Authenticity")
+    y -= 20 * mm
 
-    # Artwork image (jpg/jpeg)
     if artwork.image_filename:
         img_path = os.path.join(app.config["UPLOAD_FOLDER"], artwork.image_filename)
         if os.path.exists(img_path):
             img = ImageReader(img_path)
             iw, ih = img.getSize()
-            max_w = width - 2 * margin_x
-            max_h = 70 * mm
-            scale = min(max_w / iw, max_h / ih)
+            scale = min((w - 60 * mm) / iw, 70 * mm / ih)
             dw, dh = iw * scale, ih * scale
-            x = (width - dw) / 2
-            y -= dh
-            c.drawImage(img, x, y, width=dw, height=dh, preserveAspectRatio=True, mask="auto")
-            y -= 10 * mm
-
-    def line(label, value):
-        nonlocal y
-        c.setFont("Helvetica-Bold", 11)
-        c.drawString(margin_x, y, f"{label}:")
-        c.setFont("Helvetica", 11)
-        c.drawString(margin_x + 75, y, value if value else "—")
-        y -= 14
-
-    line("Artist", ARTIST_NAME)
-    line("Title", artwork.title)
-    line("Year", artwork.year or "—")
-    line("Medium", artwork.medium)
-    line("Dimensions", artwork.dimensions or "—")
-    line("Edition", artwork.edition_info or "Unique")
-    y -= 10
-
-    styles = getSampleStyleSheet()
-    text = (
-        "This document certifies that the artwork described above is an authentic work by the artist named, "
-        "recorded in the artist’s archive."
-    )
-    p = Paragraph(text, styles["Normal"])
-    p.wrapOn(c, width - 2 * margin_x, 100)
-    p.drawOn(c, margin_x, y)
-    y -= 55
-
-    # Signature line
-    c.setFont("Helvetica", 11)
-    c.drawString(margin_x, y, "Signed:")
-    c.line(margin_x + 55, y - 2, margin_x + 240, y - 2)
-    y -= 22
+            c.drawImage(img, (w - dw) / 2, y - dh, dw, dh)
+            y -= dh + 10 * mm
 
     c.setFont("Helvetica", 11)
-    c.drawString(margin_x, y, f"Date issued: {datetime.utcnow().strftime('%Y-%m-%d')}")
-    y -= 14
-    c.drawString(margin_x, y, f"Artwork ID: {artwork.id}")
+    for label, value in [
+        ("Artist", ARTIST_NAME),
+        ("Title", artwork.title),
+        ("Year", artwork.year or "—"),
+        ("Medium", artwork.medium),
+        ("Dimensions", artwork.dimensions or "—"),
+        ("Edition", artwork.edition_info or "Unique"),
+    ]:
+        c.drawString(30 * mm, y, f"{label}: {value}")
+        y -= 12
 
-    c.setFont("Helvetica-Oblique", 9)
-    c.drawCentredString(width / 2, 18 * mm, "This certificate is valid only for the artwork referenced above.")
-
+    c.drawString(30 * mm, y - 10, f"Artwork ID: {artwork.id}")
     c.showPage()
     c.save()
-    buf.seek(0)
 
-    return send_file(
-        buf,
-        mimetype="application/pdf",
-        as_attachment=False,
-        download_name=f"certificate_{artwork.id}.pdf",
-    )
+    buf.seek(0)
+    return send_file(buf, mimetype="application/pdf", as_attachment=False)
 
 
 @app.route("/artworks/<int:artwork_id>/box-label")
 def box_label_pdf(artwork_id):
     artwork = Artwork.query.get_or_404(artwork_id)
 
+    base = os.environ.get("PUBLIC_BASE_URL", request.url_root.rstrip("/"))
     token = make_box_token(artwork.id)
-    box_url = url_for("box_page", artwork_id=artwork.id, token=token, _external=True)
+    box_url = f"{base}{url_for('box_page', artwork_id=artwork.id, token=token)}"
 
-    # Create QR image (PNG in-memory)
-    qr = qrcode.QRCode(border=1, box_size=10)
-    qr.add_data(box_url)
-    qr.make(fit=True)
-    qr_img = qr.make_image(fill_color="black", back_color="white")
-
-    qr_bytes = io.BytesIO()
-    qr_img.save(qr_bytes, format="PNG")
-    qr_bytes.seek(0)
-    qr_reader = ImageReader(qr_bytes)
+    qr = qrcode.make(box_url)
+    qr_buf = io.BytesIO()
+    qr.save(qr_buf)
+    qr_buf.seek(0)
 
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
-    width, height = A4
-
-    margin_x = 20 * mm
-    y = height - 25 * mm
-
-    c.setFont("Helvetica-Bold", 18)
-    c.drawString(margin_x, y, "Box Label")
-    y -= 12 * mm
-
-    c.setFont("Helvetica", 12)
-    c.drawString(margin_x, y, f"Artist: {ARTIST_NAME}")
-    y -= 8 * mm
-    c.drawString(margin_x, y, f"Title: {artwork.title}")
-    y -= 8 * mm
-    c.drawString(margin_x, y, f"Year: {artwork.year or '—'}")
-    y -= 8 * mm
-    c.drawString(margin_x, y, f"Medium: {artwork.medium}")
-    y -= 8 * mm
-    c.drawString(margin_x, y, f"Dimensions: {artwork.dimensions or '—'}")
-    y -= 8 * mm
-    c.drawString(margin_x, y, f"Edition: {artwork.edition_info or 'Unique'}")
-    y -= 10 * mm
-
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(margin_x, y, f"Artwork ID: {artwork.id}")
-    y -= 8 * mm
-
-    latest = current_location(artwork.id)
-    c.setFont("Helvetica", 11)
-    c.drawString(margin_x, y, f"Current location: {(latest.location if latest else '—')}")
-    y -= 12 * mm
-
-    # Optional thumbnail (jpg/jpeg)
-    if artwork.image_filename:
-        img_path = os.path.join(app.config["UPLOAD_FOLDER"], artwork.image_filename)
-        if os.path.exists(img_path):
-            img = ImageReader(img_path)
-            iw, ih = img.getSize()
-            max_w = 75 * mm
-            max_h = 55 * mm
-            scale = min(max_w / iw, max_h / ih)
-            dw, dh = iw * scale, ih * scale
-            c.drawImage(img, margin_x, y - dh, width=dw, height=dh, preserveAspectRatio=True, mask="auto")
-
-    # QR on right
-    qr_size = 60 * mm
-    qr_x = width - margin_x - qr_size
-    qr_y = height - 75 * mm - qr_size
-    c.drawImage(qr_reader, qr_x, qr_y, width=qr_size, height=qr_size, mask="auto")
-
-    c.setFont("Helvetica", 10)
-    c.drawString(qr_x, qr_y - 7 * mm, "Scan: what's in the box")
-    c.setFont("Helvetica-Oblique", 7)
-    c.drawString(margin_x, 15 * mm, box_url)
-
+    c.drawImage(ImageReader(qr_buf), 120 * mm, 160 * mm, 60 * mm, 60 * mm)
+    c.drawString(30 * mm, 180 * mm, artwork.title)
+    c.drawString(30 * mm, 170 * mm, f"ID: {artwork.id}")
     c.showPage()
     c.save()
+
     buf.seek(0)
-
-    return send_file(
-        buf,
-        mimetype="application/pdf",
-        as_attachment=False,
-        download_name=f"box_label_{artwork.id}.pdf",
-    )
-
-
-# --------------------------------------------------
-# App entry point
-# --------------------------------------------------
-
-if __name__ == "__main__":
-    with app.app_context():
-        db.create_all()
-
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=True)
-
+    return send_file(buf, mimetype="application/pdf", as_attachment=False)
