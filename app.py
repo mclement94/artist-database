@@ -23,6 +23,8 @@ from reportlab.lib.units import mm
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Paragraph
 from reportlab.lib.utils import ImageReader
+from flask import send_from_directory
+
 
 # --------------------------------------------------
 # Configuration
@@ -127,6 +129,10 @@ class LocationLog(db.Model):
     changed_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     artwork = db.relationship("Artwork", backref=db.backref("location_logs", lazy=True))
+
+@app.route("/uploads/<path:filename>")
+def uploaded_file(filename):
+    return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
 
 
 # --------------------------------------------------
