@@ -4,58 +4,254 @@
   <meta charset="utf-8">
   <title>Artworks</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <style>
+    .toolbar {
+      display: grid;
+      gap: 12px;
+      margin-top: 14px;
+    }
+    .toolbar-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+    .filters {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr 1fr 1fr;
+      gap: 10px;
+    }
+    .filters input, .filters select {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      border-radius: 12px;
+      font-family: inherit;
+      font-size: 14px;
+      background: #fff;
+    }
+    .items {
+      display: grid;
+      gap: 12px;
+      margin-top: 14px;
+    }
+    .rowlink { text-decoration: none; color: inherit; }
+    .item {
+      display: grid;
+      grid-template-columns: 84px 1fr auto;
+      gap: 14px;
+      align-items: center;
+      padding: 12px;
+      border: 1px solid #eee;
+      border-radius: 14px;
+      background: #fff;
+    }
+    .item:hover { border-color: #ddd; }
+    .thumb {
+      width: 84px; height: 84px;
+      border-radius: 12px;
+      background: #eaeaea;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #777;
+      font-size: 12px;
+    }
+    .thumb img { width: 100%; height: 100%; object-fit: cover; display:block; }
+    .title { font-weight: 700; }
+    .meta { color: #666; font-size: 13px; margin-top: 3px; }
+    .right { display:flex; gap:10px; align-items:center; }
+    .tag {
+      font-size: 12px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: #f1f1f1;
+      color: #222;
+      white-space: nowrap;
+    }
+    .muted { color:#777; font-size: 13px; }
+    .countline { display:flex; gap: 10px; align-items:center; flex-wrap:wrap; }
+    .pill {
+      display:inline-block;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background:#f6f6f6;
+      border: 1px solid #eee;
+      color:#333;
+      font-size: 12px;
+    }
+
+    @media (max-width: 980px) {
+      .filters { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
 </head>
 <body>
   <div class="wrap">
     <div class="card">
-
-      <div class="no-print" style="display:flex; justify-content:space-between; align-items:center;">
-        <h2>Artworks</h2>
-        <button class="btn" onclick="window.print()">Print list</button>
+      <div class="toolbar-top">
+        <h2 style="margin:0;">Artworks</h2>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <a class="btn" href="{{ url_for('add_artwork') }}">Add artwork</a>
+        </div>
       </div>
 
-      {% if artworks %}
-        <div class="artwork-list">
-          {% for art in artworks %}
-            <div class="artwork-item clickable"
-                 onclick="window.location='{{ url_for('artwork_detail', artwork_id=art.id) }}'">
+      {% set mediums = artworks | map(attribute='medium') | select | list %}
+      {% set years = artworks | map(attribute='year') | select | list %}
+      {% set series_list = artworks | map(attribute='series') | select | list %}
 
-              <div class="artwork-thumb">
-                {% if art.image_filename %}
-                  <img src="{{ url_for('uploaded_file', filename=artwork.image_filename) }}">
+      <div class="toolbar">
+        <div class="filters">
+          <input id="searchInput" type="search" placeholder="Search title, medium, project, year, ID…">
 
-                {% endif %}
+          <select id="mediumFilter">
+            <option value="">All materials (medium)</option>
+            {% for m in mediums|unique|sort %}
+              <option value="{{ m|e }}">{{ m }}</option>
+            {% endfor %}
+          </select>
+
+          <select id="yearFilter">
+            <option value="">All years</option>
+            {% for y in years|unique|sort %}
+              <option value="{{ y|e }}">{{ y }}</option>
+            {% endfor %}
+          </select>
+
+          <select id="seriesFilter">
+            <option value="">All projects</option>
+            {% for s in series_list|unique|sort %}
+              <option value="{{ s|e }}">{{ s }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="countline">
+          <span class="pill">Total: <strong id="totalCount">{{ artworks|length }}</strong></span>
+          <span class="pill">Shown: <strong id="shownCount">{{ artworks|length }}</strong></span>
+          <span class="muted" id="activeFilters"></span>
+        </div>
+      </div>
+
+      {% if artworks and artworks|length > 0 %}
+        <div class="items" id="items">
+          {% for artwork in artworks %}
+            <a class="rowlink"
+               href="{{ url_for('artwork_detail', artwork_id=artwork.id) }}"
+               data-medium="{{ (artwork.medium or '')|lower|e }}"
+               data-year="{{ (artwork.year or '')|lower|e }}"
+               data-series="{{ (artwork.series or '')|lower|e }}"
+               data-search="{{ (
+                 (artwork.title or '') ~ ' ' ~
+                 (artwork.medium or '') ~ ' ' ~
+                 (artwork.series or '') ~ ' ' ~
+                 (artwork.year or '') ~ ' ' ~
+                 (artwork.id|string)
+               )|lower|e }}"
+            >
+              <div class="item">
+                <div class="thumb">
+                  {% if artwork.image_filename %}
+                    <img src="{{ url_for('uploaded_file', filename=artwork.image_filename) }}" alt="">
+                  {% else %}
+                    no image
+                  {% endif %}
+                </div>
+
+                <div>
+                  <div class="title">{{ artwork.title }}</div>
+                  <div class="meta">
+                    {{ artwork.year or "—" }} · {{ artwork.medium or "—" }} ·
+                    {% if artwork.series %}{{ artwork.series }} ·{% endif %}
+                    ID {{ artwork.id }}
+                  </div>
+                </div>
+
+                <div class="right">
+                  {% if artwork.for_sale %}
+                    <span class="tag">For sale</span>
+                  {% endif %}
+                  <span class="tag">Open</span>
+                </div>
               </div>
-
-              <div class="artwork-meta">
-                <strong>{{ art.title }}</strong>
-                {% if art.year %} ({{ art.year }}){% endif %}<br>
-
-                <small>{{ art.medium }}</small><br>
-
-                {% if art.series %}
-                  <small>Series: {{ art.series }}</small><br>
-                {% endif %}
-
-                {% if art.edition_info %}
-                  <small>Edition: {{ art.edition_info }}</small><br>
-                {% endif %}
-
-                {% if art.for_sale %}
-                  <small><strong>For sale{% if art.price %}: {{ art.price }}{% endif %}</strong></small>
-                {% endif %}
-              </div>
-
-            </div>
+            </a>
           {% endfor %}
         </div>
+
+        <p id="emptyState" class="muted" style="display:none; margin-top:14px;">
+          No artworks match your filters.
+        </p>
       {% else %}
-        <p>No artworks yet.</p>
+        <p class="muted" style="margin-top:14px;">No artworks yet.</p>
       {% endif %}
 
-      <a class="back no-print" href="{{ url_for('home') }}">← Back to home</a>
-
+      <a class="back" href="{{ url_for('home') }}">← Home</a>
     </div>
   </div>
+
+  <script>
+    (function () {
+      const searchInput = document.getElementById('searchInput');
+      const mediumFilter = document.getElementById('mediumFilter');
+      const yearFilter = document.getElementById('yearFilter');
+      const seriesFilter = document.getElementById('seriesFilter');
+
+      const itemsWrap = document.getElementById('items');
+      const emptyState = document.getElementById('emptyState');
+
+      const shownCount = document.getElementById('shownCount');
+      const activeFilters = document.getElementById('activeFilters');
+
+      function norm(v) {
+        return (v || '').toString().trim().toLowerCase();
+      }
+
+      function update() {
+        if (!itemsWrap) return;
+
+        const q = norm(searchInput.value);
+        const m = norm(mediumFilter.value);
+        const y = norm(yearFilter.value);
+        const s = norm(seriesFilter.value);
+
+        let shown = 0;
+
+        const active = [];
+        if (q) active.push(`Search: “${searchInput.value.trim()}”`);
+        if (m) active.push(`Medium: ${mediumFilter.value}`);
+        if (y) active.push(`Year: ${yearFilter.value}`);
+        if (s) active.push(`Project: ${seriesFilter.value}`);
+        activeFilters.textContent = active.length ? active.join(" · ") : "";
+
+        const links = itemsWrap.querySelectorAll('a.rowlink');
+        links.forEach(link => {
+          const ds = link.dataset;
+
+          const okSearch = !q || (ds.search || '').includes(q);
+          const okM = !m || (ds.medium || '') === m;
+          const okY = !y || (ds.year || '') === y;
+          const okS = !s || (ds.series || '') === s;
+
+          const ok = okSearch && okM && okY && okS;
+
+          link.style.display = ok ? '' : 'none';
+          if (ok) shown += 1;
+        });
+
+        shownCount.textContent = String(shown);
+        if (emptyState) emptyState.style.display = shown === 0 ? '' : 'none';
+      }
+
+      [searchInput, mediumFilter, yearFilter, seriesFilter].forEach(el => {
+        if (!el) return;
+        el.addEventListener('input', update);
+        el.addEventListener('change', update);
+      });
+
+      update();
+    })();
+  </script>
 </body>
 </html>
