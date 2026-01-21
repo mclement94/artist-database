@@ -31,13 +31,13 @@ BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 DATA_DIR = os.environ.get("DATA_DIR", BASE_DIR)
 os.makedirs(DATA_DIR, exist_ok=True)
 
+DB_PATH = os.path.join(DATA_DIR, "database.db")
+
 UPLOAD_DIR = os.path.join(DATA_DIR, "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-DB_PATH = os.path.join(DATA_DIR, "database.db")
-
 ALLOWED_EXTENSIONS = {"jpg", "jpeg"}
-ARTIST_NAME = "Mattis Clement"
+ARTIST_NAME = "Miet Warlop"
 
 app = Flask(__name__)
 app.config.update(
@@ -47,11 +47,12 @@ app.config.update(
     UPLOAD_FOLDER=UPLOAD_DIR,
 )
 
-db = SQLAlchemy(app)
-
 print("DATA_DIR =", DATA_DIR)
 print("DB_PATH  =", DB_PATH)
 print("UPLOAD_DIR =", UPLOAD_DIR)
+
+db = SQLAlchemy(app)
+
 
 
 # --------------------------------------------------
