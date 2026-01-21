@@ -15,7 +15,6 @@
     }
     .btn-small{
       padding:10px 12px;
-      border-radius:12px;
       border:1px solid #eee;
       background:#fff;
       cursor:pointer;
@@ -37,7 +36,6 @@
       width:100%;
       padding:10px 12px;
       border:1px solid #ddd;
-      border-radius:12px;
       font-family:inherit;
       font-size:14px;
       background:#fff;
@@ -46,15 +44,8 @@
       display:flex; flex-wrap:wrap; gap:10px; align-items:center;
       color:#666; font-size:13px;
     }
-    .chip{
-      display:inline-flex; align-items:center; gap:8px;
-      padding:6px 10px;
-      border-radius:999px;
-      background:#f6f6f6;
-      border:1px solid #eee;
-      color:#333;
-      font-size:12px;
-    }
+
+
     .muted{ color:#777; font-size:13px; }
 
     .items{
@@ -70,7 +61,6 @@
       align-items:center;
       padding:12px;
       border:1px solid #eee;
-      border-radius:14px;
       background:#fff;
     }
     .item:hover{ border-color:#ddd; }
@@ -96,7 +86,6 @@
     .tag{
       font-size:12px;
       padding:6px 10px;
-      border-radius:999px;
       background:#f1f1f1;
       color:#222;
       white-space:nowrap;
@@ -127,10 +116,10 @@
     <div class="card">
 
       <div class="headerbar">
-        <h2 style="margin:0;">Artworks</h2>
+        <h2 style="margin:0;">List Of Artworks</h2>
         <div class="header-actions">
           <a class="btn" href="{{ url_for('add_artwork') }}">Add artwork</a>
-          <button class="btn-small" id="printBtn" type="button">Print page</button>
+          <button class="btn" id="printBtn" type="button">Print page</button>
         </div>
       </div>
 

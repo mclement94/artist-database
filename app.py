@@ -363,3 +363,7 @@ def box_label_pdf(artwork_id):
 
     buf.seek(0)
     return send_file(buf, mimetype="application/pdf", as_attachment=False)
+
+if __name__ == "__main__":
+    app.run(host="127.0.0.1", port=5000, debug=True)
+
