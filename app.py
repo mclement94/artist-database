@@ -28,7 +28,11 @@ from reportlab.lib.utils import ImageReader
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
-DATA_DIR = os.environ.get("DATA_DIR", BASE_DIR)
+# Prefer Render disk if it exists, otherwise fall back
+DATA_DIR = os.environ.get("DATA_DIR")
+if not DATA_DIR:
+    DATA_DIR = "/var/data" if os.path.isdir("/var/data") else BASE_DIR
+
 os.makedirs(DATA_DIR, exist_ok=True)
 
 DB_PATH = os.path.join(DATA_DIR, "database.db")
