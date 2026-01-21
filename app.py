@@ -49,6 +49,11 @@ app.config.update(
 
 db = SQLAlchemy(app)
 
+print("DATA_DIR =", DATA_DIR)
+print("DB_PATH  =", DB_PATH)
+print("UPLOAD_DIR =", UPLOAD_DIR)
+
+
 # --------------------------------------------------
 # Helpers
 # --------------------------------------------------
