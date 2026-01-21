@@ -76,6 +76,7 @@ a {
 .btn:hover {
   opacity: 0.9;
   color: white;
+  background-color:white;
 }
 
 .back {
