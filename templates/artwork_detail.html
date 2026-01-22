@@ -79,9 +79,10 @@
           <div class="actions">
             <a class="btn" href="{{ url_for('edit_artwork', artwork_id=artwork.id) }}">Edit artwork</a>
 
-            <a class="btn" href="{{ url_for('certificate_pdf', artwork_id=artwork.id) }}" target="_blank">
-              View certificate (PDF)
+            <a class="btn" href="{{ url_for('certificate_print', artwork_id=artwork.id) }}" target="_blank">
+              Print / Save certificate (PDF)
             </a>
+
 
             <a class="btn" href="{{ url_for('box_label_pdf', artwork_id=artwork.id) }}" target="_blank">
               Print box label (PDF + QR)
