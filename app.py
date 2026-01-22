@@ -2,6 +2,7 @@ import io
 import json
 import os
 import re
+import traceback
 from datetime import datetime
 
 import qrcode
@@ -25,6 +26,7 @@ from werkzeug.utils import secure_filename
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
+# Render persistent disk convention is usually /var/data (only exists if you attached it)
 DATA_DIR = os.environ.get("DATA_DIR") or ("/var/data" if os.path.isdir("/var/data") else BASE_DIR)
 os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -32,10 +34,9 @@ UPLOAD_DIR = os.path.join(DATA_DIR, "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 MAIN_DB_PATH = os.path.join(DATA_DIR, "database.db")                 # existing DB
-CERT_DB_PATH = os.path.join(DATA_DIR, "certificate_templates.db")    # new DB for Unlayer template
+CERT_DB_PATH = os.path.join(DATA_DIR, "certificate_templates.db")    # second DB for Unlayer template
 
 ALLOWED_ARTWORK_EXTENSIONS = {"jpg", "jpeg", "png"}
-
 ARTIST_NAME = "Miet Warlop"
 
 
@@ -92,7 +93,7 @@ class LocationLog(db.Model):
     artwork = db.relationship("Artwork", backref="location_logs")
 
 
-# Keep legacy table (keeps old DB compatible; not used by Unlayer pipeline)
+# Legacy table (keeps old DB compatible; not used by Unlayer pipeline)
 class CertificateTemplate(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     settings_json = db.Column(db.Text, nullable=False, default="{}")
@@ -138,6 +139,8 @@ def public_base_url() -> str:
     """
     For Playwright PDF rendering in production, set:
       PUBLIC_BASE_URL=https://<your-app>.onrender.com
+
+    Falls back to request.url_root for local dev.
     """
     return os.environ.get("PUBLIC_BASE_URL", request.url_root.rstrip("/"))
 
@@ -201,37 +204,34 @@ def wrap_full_html(inner_html: str) -> str:
 
 def strip_artwork_image_module_from_unlayer_html(template_html: str) -> str:
     """
-    When the artwork has NO image, we remove the Unlayer image block that uses the
-    artwork image placeholder, BEFORE merging.
-
-    This prevents broken-image icons / broken link messages in the PDF.
+    If an artwork has NO image, remove the Unlayer image block that contains
+    the artwork image placeholder. This avoids broken image icons in HTML/PDF.
     """
     if not template_html:
         return template_html
 
-    # Match the placeholder token (we support %%...%% and [[...]] just in case)
+    # Support %%artwork_image_url%% and [[artwork_image_url]]
     token_pattern = r"(%%\s*artwork_image_url\s*%%|\[\[\s*artwork_image_url\s*\]\])"
 
     html = template_html
 
-    # 1) Remove <img ...> tags that still contain the token in src
+    # Remove <img> tags containing token in src
     html = re.sub(
         rf"<img\b[^>]*\bsrc=(['\"]).*?{token_pattern}.*?\1[^>]*>",
         "",
         html,
-        flags=re.IGNORECASE | re.DOTALL
+        flags=re.IGNORECASE | re.DOTALL,
     )
 
-    # 2) Remove common Unlayer "image module" wrapper tables that contain the token anywhere inside
-    # Unlayer exports lots of nested tables; removing the nearest enclosing table is usually clean.
+    # Remove enclosing tables containing token anywhere inside
     html = re.sub(
         rf"<table\b[^>]*>.*?{token_pattern}.*?</table>",
         "",
         html,
-        flags=re.IGNORECASE | re.DOTALL
+        flags=re.IGNORECASE | re.DOTALL,
     )
 
-    # 3) Remove empty whitespace artifacts that can remain
+    # Clean up excessive whitespace
     html = re.sub(r"\n{3,}", "\n\n", html)
 
     return html
@@ -239,9 +239,10 @@ def strip_artwork_image_module_from_unlayer_html(template_html: str) -> str:
 
 def merge_unlayer_html(template_html: str, artwork: Artwork, artwork_image_url: str) -> str:
     """
-    Museum-grade stable placeholders:
-      %%tag%%
-    (Also supports [[tag]] and {{tag}} for backwards compatibility.)
+    Supported placeholder styles in saved Unlayer HTML:
+      %%tag%% (preferred)
+      [[tag]] (allowed)
+      {{tag}} and html-escaped variants (legacy compatibility)
     """
     def safe(v):
         if v is None:
@@ -283,6 +284,14 @@ def merge_unlayer_html(template_html: str, artwork: Artwork, artwork_image_url: 
 
 
 def pdf_from_url_with_playwright(url: str) -> bytes:
+    """
+    Render HTML route to PDF using Playwright.
+
+    Important choices for stability on Render:
+    - wait_until="load" (networkidle often hangs)
+    - small settle time
+    - no-sandbox flags
+    """
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as p:
@@ -295,24 +304,20 @@ def pdf_from_url_with_playwright(url: str) -> bytes:
         )
         page = browser.new_page()
 
-        # "networkidle" often hangs on hosted environments.
         page.goto(url, wait_until="load", timeout=60_000)
-
-        # small settle time for layout/images/fonts
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(750)
 
         pdf_bytes = page.pdf(
             format="A4",
             print_background=True,
-            prefer_css_page_size=True
+            prefer_css_page_size=True,
         )
         browser.close()
         return pdf_bytes
 
 
-
 # ============================================================
-# Uploads (single source of truth)
+# Uploads
 # ============================================================
 
 @app.route("/uploads/<path:filename>")
@@ -470,12 +475,12 @@ def certificate_render(artwork_id):
 
     base = public_base_url()
 
-    # If artwork has an image, we build an absolute URL.
+    # If artwork has an image, build an absolute URL.
     artwork_image_url = ""
     if artwork.image_filename:
         artwork_image_url = f"{base}{url_for('uploaded_file', filename=artwork.image_filename)}"
 
-    # IMPORTANT: If no image, strip the image block from template BEFORE merge.
+    # If no image, strip the image module BEFORE merge to avoid broken icons
     template_html = tpl.html
     if not artwork_image_url:
         template_html = strip_artwork_image_module_from_unlayer_html(template_html)
@@ -491,11 +496,18 @@ def certificate_pdf(artwork_id):
     try:
         pdf_bytes = pdf_from_url_with_playwright(render_url)
     except Exception as e:
+        # Always log a full traceback to Render logs
+        app.logger.exception("Certificate PDF generation failed")
+
+        # Also return a readable error body
         return Response(
-            "Playwright PDF failed. Install it with:\n\n"
-            "pip install playwright\n"
-            "playwright install chromium\n\n"
-            f"Error: {html_escape(str(e))}",
+            "Certificate PDF generation failed.\n\n"
+            f"Render URL: {render_url}\n\n"
+            "Common fixes on Render:\n"
+            "- Start command: gunicorn app:app --timeout 180 --workers 1\n"
+            "- Build command: pip install -r requirements.txt && python -m playwright install --with-deps chromium\n"
+            "- Set PUBLIC_BASE_URL=https://<your-app>.onrender.com\n\n"
+            f"Error: {html_escape(str(e))}\n",
             mimetype="text/plain",
             status=500
         )
