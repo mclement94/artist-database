@@ -1,105 +1,63 @@
-import os
 import io
+import json
+import os
+import re
 from datetime import datetime
 
+import qrcode
 from flask import (
-    Flask,
-    render_template,
-    request,
-    redirect,
-    url_for,
-    send_file,
-    send_from_directory,
+    Flask, Response, jsonify, redirect, render_template, request,
+    send_file, send_from_directory, url_for
 )
 from flask_sqlalchemy import SQLAlchemy
-from werkzeug.utils import secure_filename
-
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
-import qrcode
-
+from markupsafe import escape as html_escape
 from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
 from reportlab.lib.units import mm
 from reportlab.lib.utils import ImageReader
+from reportlab.pdfgen import canvas
+from werkzeug.utils import secure_filename
 
-# --------------------------------------------------
-# Basic config
-# --------------------------------------------------
+
+# ============================================================
+# Paths / Config
+# ============================================================
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
-# Prefer Render disk if it exists, otherwise fall back
-DATA_DIR = os.environ.get("DATA_DIR")
-if not DATA_DIR:
-    DATA_DIR = "/var/data" if os.path.isdir("/var/data") else BASE_DIR
-
+DATA_DIR = os.environ.get("DATA_DIR") or ("/var/data" if os.path.isdir("/var/data") else BASE_DIR)
 os.makedirs(DATA_DIR, exist_ok=True)
-
-DB_PATH = os.path.join(DATA_DIR, "database.db")
 
 UPLOAD_DIR = os.path.join(DATA_DIR, "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-ALLOWED_EXTENSIONS = {"jpg", "jpeg"}
+MAIN_DB_PATH = os.path.join(DATA_DIR, "database.db")                 # existing DB
+CERT_DB_PATH = os.path.join(DATA_DIR, "certificate_templates.db")    # new DB for Unlayer template
+
+ALLOWED_ARTWORK_EXTENSIONS = {"jpg", "jpeg", "png"}
+
 ARTIST_NAME = "Miet Warlop"
+
+
+# ============================================================
+# Flask + SQLAlchemy (binds)
+# ============================================================
 
 app = Flask(__name__)
 app.config.update(
     SECRET_KEY=os.environ.get("SECRET_KEY", "dev-change-me"),
-    SQLALCHEMY_DATABASE_URI="sqlite:///" + DB_PATH,
+    SQLALCHEMY_DATABASE_URI="sqlite:///" + MAIN_DB_PATH,
+    SQLALCHEMY_BINDS={"cert": "sqlite:///" + CERT_DB_PATH},
     SQLALCHEMY_TRACK_MODIFICATIONS=False,
     UPLOAD_FOLDER=UPLOAD_DIR,
 )
 
-print("DATA_DIR =", DATA_DIR)
-print("DB_PATH  =", DB_PATH)
-print("UPLOAD_DIR =", UPLOAD_DIR)
-
 db = SQLAlchemy(app)
 
 
-
-# --------------------------------------------------
-# Helpers
-# --------------------------------------------------
-
-
-def allowed_file(filename):
-    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
-
-
-def save_image(file):
-    filename = secure_filename(file.filename)
-    ts = datetime.utcnow().strftime("%Y%m%d%H%M%S")
-    final = f"{ts}_{filename}"
-    file.save(os.path.join(app.config["UPLOAD_FOLDER"], final))
-    return final
-
-
-def serializer():
-    return URLSafeTimedSerializer(app.config["SECRET_KEY"], salt="box-token")
-
-
-def make_box_token(artwork_id):
-    return serializer().dumps({"artwork_id": artwork_id})
-
-
-def verify_box_token(token, max_age=60 * 60 * 24 * 365 * 5):
-    return serializer().loads(token, max_age=max_age)
-
-
-def current_location(artwork_id):
-    return (
-        LocationLog.query.filter_by(artwork_id=artwork_id)
-        .order_by(LocationLog.changed_at.desc())
-        .first()
-    )
-
-
-# --------------------------------------------------
-# Models
-# --------------------------------------------------
-
+# ============================================================
+# Models (MAIN DB)
+# ============================================================
 
 class Artwork(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -134,27 +92,220 @@ class LocationLog(db.Model):
     artwork = db.relationship("Artwork", backref="location_logs")
 
 
-# --------------------------------------------------
-# Init DB (important for Render)
-# --------------------------------------------------
+# Keep legacy table (keeps old DB compatible; not used by Unlayer pipeline)
+class CertificateTemplate(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    settings_json = db.Column(db.Text, nullable=False, default="{}")
+    logo_filename = db.Column(db.String(255), nullable=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# ============================================================
+# Model (CERT DB) — Unlayer template storage
+# ============================================================
+
+class UnlayerCertificateTemplate(db.Model):
+    __bind_key__ = "cert"
+    __tablename__ = "unlayer_certificate_templates"
+
+    id = db.Column(db.Integer, primary_key=True)
+    design_json = db.Column(db.Text, nullable=True)  # JSON string
+    html = db.Column(db.Text, nullable=True)         # exported HTML
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
 
 with app.app_context():
     db.create_all()
 
-# --------------------------------------------------
-# Static serving for uploads
-# --------------------------------------------------
 
+# ============================================================
+# Helpers
+# ============================================================
+
+def allowed_ext(filename: str, allowed: set[str]) -> bool:
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in allowed
+
+
+def save_upload(file_storage) -> str:
+    filename = secure_filename(file_storage.filename)
+    ts = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    final = f"{ts}_{filename}"
+    file_storage.save(os.path.join(app.config["UPLOAD_FOLDER"], final))
+    return final
+
+
+def public_base_url() -> str:
+    """
+    For Playwright PDF rendering in production, set:
+      PUBLIC_BASE_URL=https://<your-app>.onrender.com
+    """
+    return os.environ.get("PUBLIC_BASE_URL", request.url_root.rstrip("/"))
+
+
+def current_location(artwork_id: int):
+    return (
+        LocationLog.query.filter_by(artwork_id=artwork_id)
+        .order_by(LocationLog.changed_at.desc())
+        .first()
+    )
+
+
+def serializer() -> URLSafeTimedSerializer:
+    return URLSafeTimedSerializer(app.config["SECRET_KEY"], salt="box-token")
+
+
+def make_box_token(artwork_id: int) -> str:
+    return serializer().dumps({"artwork_id": artwork_id})
+
+
+def verify_box_token(token: str, max_age_seconds: int = 60 * 60 * 24 * 365 * 5):
+    return serializer().loads(token, max_age=max_age_seconds)
+
+
+def get_or_create_unlayer_template() -> UnlayerCertificateTemplate:
+    tpl = UnlayerCertificateTemplate.query.get(1)
+    if not tpl:
+        tpl = UnlayerCertificateTemplate(id=1, design_json=None, html=None)
+        db.session.add(tpl)
+        db.session.commit()
+    return tpl
+
+
+def wrap_full_html(inner_html: str) -> str:
+    # Print-safe + remove visible link styling / link artifacts in PDF viewers.
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Certificate</title>
+  <style>
+    @page {{ size: A4; margin: 20mm; }}
+    html, body {{ margin:0; padding:0; }}
+    * {{ -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
+    img {{ max-width: 100%; height: auto; }}
+
+    /* Museum-grade: never show "link look" in PDF */
+    a {{
+      color: inherit !important;
+      text-decoration: none !important;
+      pointer-events: none !important;
+    }}
+  </style>
+</head>
+<body>
+{inner_html}
+</body>
+</html>"""
+
+
+def strip_artwork_image_module_from_unlayer_html(template_html: str) -> str:
+    """
+    When the artwork has NO image, we remove the Unlayer image block that uses the
+    artwork image placeholder, BEFORE merging.
+
+    This prevents broken-image icons / broken link messages in the PDF.
+    """
+    if not template_html:
+        return template_html
+
+    # Match the placeholder token (we support %%...%% and [[...]] just in case)
+    token_pattern = r"(%%\s*artwork_image_url\s*%%|\[\[\s*artwork_image_url\s*\]\])"
+
+    html = template_html
+
+    # 1) Remove <img ...> tags that still contain the token in src
+    html = re.sub(
+        rf"<img\b[^>]*\bsrc=(['\"]).*?{token_pattern}.*?\1[^>]*>",
+        "",
+        html,
+        flags=re.IGNORECASE | re.DOTALL
+    )
+
+    # 2) Remove common Unlayer "image module" wrapper tables that contain the token anywhere inside
+    # Unlayer exports lots of nested tables; removing the nearest enclosing table is usually clean.
+    html = re.sub(
+        rf"<table\b[^>]*>.*?{token_pattern}.*?</table>",
+        "",
+        html,
+        flags=re.IGNORECASE | re.DOTALL
+    )
+
+    # 3) Remove empty whitespace artifacts that can remain
+    html = re.sub(r"\n{3,}", "\n\n", html)
+
+    return html
+
+
+def merge_unlayer_html(template_html: str, artwork: Artwork, artwork_image_url: str) -> str:
+    """
+    Museum-grade stable placeholders:
+      %%tag%%
+    (Also supports [[tag]] and {{tag}} for backwards compatibility.)
+    """
+    def safe(v):
+        if v is None:
+            return "—"
+        s = str(v).strip()
+        return str(html_escape(s)) if s else "—"
+
+    values = {
+        "artist_name": safe(ARTIST_NAME),
+        "artwork_title": safe(artwork.title),
+        "year": safe(artwork.year),
+        "medium": safe(artwork.medium),
+        "dimensions": safe(artwork.dimensions),
+        "edition_info": safe(artwork.edition_info or "Unique"),
+        "artwork_id": safe(artwork.id),
+        "certificate_date": safe(datetime.utcnow().strftime("%Y-%m-%d")),
+        "artwork_image_url": str(html_escape(artwork_image_url or "")),
+        "signature_line": (
+            '<span style="display:inline-block;'
+            'border-bottom:1px solid #111;'
+            'min-width:260px;height:1.2em;vertical-align:baseline;"></span>'
+        ),
+    }
+
+    html = template_html or ""
+
+    for key, val in values.items():
+        patterns = [
+            re.compile(r"%%\s*" + re.escape(key) + r"\s*%%"),
+            re.compile(r"\[\[\s*" + re.escape(key) + r"\s*\]\]"),
+            re.compile(r"\{\{\s*" + re.escape(key) + r"\s*\}\}"),
+            re.compile(r"&#91;&#91;\s*" + re.escape(key) + r"\s*&#93;&#93;"),
+            re.compile(r"&#123;&#123;\s*" + re.escape(key) + r"\s*&#125;&#125;"),
+        ]
+        for pat in patterns:
+            html = pat.sub(val, html)
+
+    return html
+
+
+def pdf_from_url_with_playwright(url: str) -> bytes:
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        page.goto(url, wait_until="networkidle")
+        pdf_bytes = page.pdf(format="A4", print_background=True, prefer_css_page_size=True)
+        browser.close()
+        return pdf_bytes
+
+
+# ============================================================
+# Uploads (single source of truth)
+# ============================================================
 
 @app.route("/uploads/<path:filename>")
 def uploaded_file(filename):
     return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
 
 
-# --------------------------------------------------
+# ============================================================
 # Pages
-# --------------------------------------------------
-
+# ============================================================
 
 @app.route("/")
 def home():
@@ -174,10 +325,9 @@ def artwork_detail(artwork_id):
     return render_template("artwork_detail.html", artwork=artwork, latest=latest)
 
 
-# --------------------------------------------------
-# Create / Edit
-# --------------------------------------------------
-
+# ============================================================
+# Create / Edit artworks
+# ============================================================
 
 @app.route("/add-artwork", methods=["GET", "POST"])
 def add_artwork():
@@ -186,9 +336,9 @@ def add_artwork():
         image_filename = None
 
         if image and image.filename:
-            if not allowed_file(image.filename):
-                return "Only JPG/JPEG allowed", 400
-            image_filename = save_image(image)
+            if not allowed_ext(image.filename, ALLOWED_ARTWORK_EXTENSIONS):
+                return "Only JPG/JPEG/PNG allowed", 400
+            image_filename = save_upload(image)
 
         artwork = Artwork(
             title=request.form["title"],
@@ -199,7 +349,7 @@ def add_artwork():
             description=request.form.get("description"),
             edition_type=request.form.get("edition_type"),
             edition_info=request.form.get("edition_info"),
-            for_sale=request.form.get("for_sale") == "yes",
+            for_sale=(request.form.get("for_sale") == "yes"),
             price=request.form.get("price"),
             notes=request.form.get("notes"),
             image_filename=image_filename,
@@ -224,15 +374,15 @@ def edit_artwork(artwork_id):
         artwork.description = request.form.get("description")
         artwork.edition_type = request.form.get("edition_type")
         artwork.edition_info = request.form.get("edition_info")
-        artwork.for_sale = request.form.get("for_sale") == "yes"
+        artwork.for_sale = (request.form.get("for_sale") == "yes")
         artwork.price = request.form.get("price")
         artwork.notes = request.form.get("notes")
 
         image = request.files.get("image")
         if image and image.filename:
-            if not allowed_file(image.filename):
-                return "Only JPG/JPEG allowed", 400
-            artwork.image_filename = save_image(image)
+            if not allowed_ext(image.filename, ALLOWED_ARTWORK_EXTENSIONS):
+                return "Only JPG/JPEG/PNG allowed", 400
+            artwork.image_filename = save_upload(image)
 
         db.session.commit()
         return redirect(url_for("artwork_detail", artwork_id=artwork.id))
@@ -240,10 +390,110 @@ def edit_artwork(artwork_id):
     return render_template("edit_artwork.html", artwork=artwork)
 
 
-# --------------------------------------------------
-# Box page (QR target)
-# --------------------------------------------------
+# ============================================================
+# Certificate Designer (Unlayer)
+# ============================================================
 
+@app.route("/certificate-designer")
+def certificate_designer():
+    sample = Artwork.query.order_by(Artwork.created_at.desc()).first()
+    return render_template(
+        "certificate_designer.html",
+        sample=sample,
+        unlayer_project_id=os.environ.get("UNLAYER_PROJECT_ID"),
+    )
+
+
+@app.route("/api/certificate-template", methods=["GET"])
+def api_certificate_template_get():
+    tpl = get_or_create_unlayer_template()
+    design = None
+
+    if tpl.design_json:
+        try:
+            design = json.loads(tpl.design_json)
+        except Exception:
+            design = None
+
+    return jsonify({
+        "id": tpl.id,
+        "design_json": design,
+        "updated_at": tpl.updated_at.isoformat() if tpl.updated_at else None
+    })
+
+
+@app.route("/api/certificate-template", methods=["POST"])
+def api_certificate_template_save():
+    tpl = get_or_create_unlayer_template()
+    payload = request.get_json(force=True, silent=False)
+
+    if not payload or "design_json" not in payload or "html" not in payload:
+        return "Missing design_json/html", 400
+
+    tpl.design_json = json.dumps(payload["design_json"])
+    tpl.html = payload["html"]
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+# ============================================================
+# Certificate render (HTML) + PDF (Playwright)
+# ============================================================
+
+@app.route("/artworks/<int:artwork_id>/certificate-render")
+def certificate_render(artwork_id):
+    artwork = Artwork.query.get_or_404(artwork_id)
+    tpl = get_or_create_unlayer_template()
+
+    if not tpl.html:
+        return Response(
+            "No Unlayer template saved yet. Go to /certificate-designer and click Save template.",
+            status=400
+        )
+
+    base = public_base_url()
+
+    # If artwork has an image, we build an absolute URL.
+    artwork_image_url = ""
+    if artwork.image_filename:
+        artwork_image_url = f"{base}{url_for('uploaded_file', filename=artwork.image_filename)}"
+
+    # IMPORTANT: If no image, strip the image block from template BEFORE merge.
+    template_html = tpl.html
+    if not artwork_image_url:
+        template_html = strip_artwork_image_module_from_unlayer_html(template_html)
+
+    merged = merge_unlayer_html(template_html, artwork, artwork_image_url)
+    return Response(wrap_full_html(merged), mimetype="text/html")
+
+
+@app.route("/artworks/<int:artwork_id>/certificate")
+def certificate_pdf(artwork_id):
+    render_url = public_base_url() + url_for("certificate_render", artwork_id=artwork_id)
+
+    try:
+        pdf_bytes = pdf_from_url_with_playwright(render_url)
+    except Exception as e:
+        return Response(
+            "Playwright PDF failed. Install it with:\n\n"
+            "pip install playwright\n"
+            "playwright install chromium\n\n"
+            f"Error: {html_escape(str(e))}",
+            mimetype="text/plain",
+            status=500
+        )
+
+    return send_file(
+        io.BytesIO(pdf_bytes),
+        mimetype="application/pdf",
+        as_attachment=False,
+        download_name=f"certificate_{artwork_id}.pdf"
+    )
+
+
+# ============================================================
+# Box page (location logging)
+# ============================================================
 
 @app.route("/artworks/<int:artwork_id>/box", methods=["GET", "POST"])
 def box_page(artwork_id):
@@ -256,7 +506,7 @@ def box_page(artwork_id):
     if token:
         try:
             data = verify_box_token(token)
-            can_update = data.get("artwork_id") == artwork_id
+            can_update = (data.get("artwork_id") == artwork_id)
         except (BadSignature, SignatureExpired):
             token_error = "Invalid or expired QR code."
 
@@ -267,18 +517,12 @@ def box_page(artwork_id):
         if not can_update:
             error = "Not authorised."
         else:
-            location = request.form.get("location", "").strip()
-            note = request.form.get("note", "").strip()
+            location = (request.form.get("location") or "").strip()
+            note = (request.form.get("note") or "").strip()
             if not location:
                 error = "Location required."
             else:
-                db.session.add(
-                    LocationLog(
-                        artwork_id=artwork.id,
-                        location=location,
-                        note=note,
-                    )
-                )
+                db.session.add(LocationLog(artwork_id=artwork.id, location=location, note=note))
                 db.session.commit()
                 success = True
 
@@ -302,59 +546,15 @@ def box_page(artwork_id):
     )
 
 
-# --------------------------------------------------
-# PDFs
-# --------------------------------------------------
-
-
-@app.route("/artworks/<int:artwork_id>/certificate")
-def certificate_pdf(artwork_id):
-    artwork = Artwork.query.get_or_404(artwork_id)
-
-    buf = io.BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
-    w, h = A4
-    y = h - 40 * mm
-
-    c.setFont("Helvetica-Bold", 22)
-    c.drawCentredString(w / 2, y, "Certificate of Authenticity")
-    y -= 20 * mm
-
-    if artwork.image_filename:
-        img_path = os.path.join(app.config["UPLOAD_FOLDER"], artwork.image_filename)
-        if os.path.exists(img_path):
-            img = ImageReader(img_path)
-            iw, ih = img.getSize()
-            scale = min((w - 60 * mm) / iw, 70 * mm / ih)
-            dw, dh = iw * scale, ih * scale
-            c.drawImage(img, (w - dw) / 2, y - dh, dw, dh)
-            y -= dh + 10 * mm
-
-    c.setFont("Helvetica", 11)
-    for label, value in [
-        ("Artist", ARTIST_NAME),
-        ("Title", artwork.title),
-        ("Year", artwork.year or "—"),
-        ("Medium", artwork.medium),
-        ("Dimensions", artwork.dimensions or "—"),
-        ("Edition", artwork.edition_info or "Unique"),
-    ]:
-        c.drawString(30 * mm, y, f"{label}: {value}")
-        y -= 12
-
-    c.drawString(30 * mm, y - 10, f"Artwork ID: {artwork.id}")
-    c.showPage()
-    c.save()
-
-    buf.seek(0)
-    return send_file(buf, mimetype="application/pdf", as_attachment=False)
-
+# ============================================================
+# Box label PDF (QR)
+# ============================================================
 
 @app.route("/artworks/<int:artwork_id>/box-label")
 def box_label_pdf(artwork_id):
     artwork = Artwork.query.get_or_404(artwork_id)
 
-    base = os.environ.get("PUBLIC_BASE_URL", request.url_root.rstrip("/"))
+    base = public_base_url()
     token = make_box_token(artwork.id)
     box_url = f"{base}{url_for('box_page', artwork_id=artwork.id, token=token)}"
 
@@ -365,15 +565,25 @@ def box_label_pdf(artwork_id):
 
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
-    c.drawImage(ImageReader(qr_buf), 120 * mm, 160 * mm, 60 * mm, 60 * mm)
-    c.drawString(30 * mm, 180 * mm, artwork.title)
-    c.drawString(30 * mm, 170 * mm, f"ID: {artwork.id}")
+
+    qr_size = 60 * mm
+    c.drawImage(ImageReader(qr_buf), 120 * mm, 160 * mm, qr_size, qr_size)
+
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(30 * mm, 190 * mm, artwork.title)
+
+    c.setFont("Helvetica", 12)
+    c.drawString(30 * mm, 180 * mm, f"ID: {artwork.id}")
+
+    c.setFont("Helvetica", 9)
+    c.drawString(30 * mm, 170 * mm, box_url)
+
     c.showPage()
     c.save()
 
     buf.seek(0)
     return send_file(buf, mimetype="application/pdf", as_attachment=False)
 
+
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=5000, debug=True)
-

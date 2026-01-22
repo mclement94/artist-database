@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{{ artwork.title }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
@@ -17,7 +18,9 @@
         <div>
           <div class="imgbox">
             {% if artwork.image_filename %}
-              <img src="{{ url_for('static', filename='uploads/' ~ artwork.image_filename) }}" alt="Artwork image">
+              <img src="{{ url_for('uploaded_file', filename=artwork.image_filename) }}" alt="Artwork image">
+            {% else %}
+              <div class="empty">No image</div>
             {% endif %}
           </div>
 
@@ -29,37 +32,24 @@
 
         <!-- Right: metadata -->
         <div>
-
           <div class="grid">
             <div class="k">Year</div>
-            <div class="v">
-              {% if artwork.year %}{{ artwork.year }}{% else %}<span class="empty">—</span>{% endif %}
-            </div>
+            <div class="v">{% if artwork.year %}{{ artwork.year }}{% else %}<span class="empty">—</span>{% endif %}</div>
 
             <div class="k">Series / Project</div>
-            <div class="v">
-              {% if artwork.series %}{{ artwork.series }}{% else %}<span class="empty">—</span>{% endif %}
-            </div>
+            <div class="v">{% if artwork.series %}{{ artwork.series }}{% else %}<span class="empty">—</span>{% endif %}</div>
 
             <div class="k">Medium</div>
-            <div class="v">
-              {% if artwork.medium %}{{ artwork.medium }}{% else %}<span class="empty">—</span>{% endif %}
-            </div>
+            <div class="v">{% if artwork.medium %}{{ artwork.medium }}{% else %}<span class="empty">—</span>{% endif %}</div>
 
             <div class="k">Dimensions</div>
-            <div class="v">
-              {% if artwork.dimensions %}{{ artwork.dimensions }}{% else %}<span class="empty">—</span>{% endif %}
-            </div>
+            <div class="v">{% if artwork.dimensions %}{{ artwork.dimensions }}{% else %}<span class="empty">—</span>{% endif %}</div>
 
             <div class="k">Edition type</div>
-            <div class="v">
-              {% if artwork.edition_type %}{{ artwork.edition_type }}{% else %}<span class="empty">—</span>{% endif %}
-            </div>
+            <div class="v">{% if artwork.edition_type %}{{ artwork.edition_type }}{% else %}<span class="empty">—</span>{% endif %}</div>
 
             <div class="k">Edition info</div>
-            <div class="v">
-              {% if artwork.edition_info %}{{ artwork.edition_info }}{% else %}<span class="empty">—</span>{% endif %}
-            </div>
+            <div class="v">{% if artwork.edition_info %}{{ artwork.edition_info }}{% else %}<span class="empty">—</span>{% endif %}</div>
 
             <div class="k">For sale</div>
             <div class="v">
@@ -72,34 +62,18 @@
 
             <div class="k">Current location</div>
             <div class="v">
-              {% if latest %}
-                {{ latest.location }}
-              {% else %}
-                <span class="empty">—</span>
-              {% endif %}
+              {% if latest %}{{ latest.location }}{% else %}<span class="empty">—</span>{% endif %}
             </div>
           </div>
 
           <div class="section">
             <div class="k" style="margin-bottom:6px;">Description</div>
-            <div class="v">
-              {% if artwork.description %}
-                {{ artwork.description }}
-              {% else %}
-                <span class="empty">—</span>
-              {% endif %}
-            </div>
+            <div class="v">{% if artwork.description %}{{ artwork.description }}{% else %}<span class="empty">—</span>{% endif %}</div>
           </div>
 
           <div class="section">
             <div class="k" style="margin-bottom:6px;">Notes (internal)</div>
-            <div class="v">
-              {% if artwork.notes %}
-                {{ artwork.notes }}
-              {% else %}
-                <span class="empty">—</span>
-              {% endif %}
-            </div>
+            <div class="v">{% if artwork.notes %}{{ artwork.notes }}{% else %}<span class="empty">—</span>{% endif %}</div>
           </div>
 
           <div class="actions">
@@ -119,7 +93,6 @@
           </div>
 
           <a class="back" href="{{ url_for('artwork_list') }}">← Back to list</a>
-
         </div>
       </div>
 

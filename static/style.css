@@ -33,6 +33,18 @@ img {
   padding: 28px;
 }
 
+input{
+  width: 100%;
+}
+
+textarea{
+  width: 100%;
+}
+
+select{
+  width: 100%;
+}
+
 /* --------------------------------------------------
    Typography
 -------------------------------------------------- */
@@ -171,7 +183,6 @@ a {
     .imgbox {
       background: red;
       overflow: hidden;
-      min-height: 220px;
     }
     .imgbox img {
       width: 100%;
@@ -246,6 +257,11 @@ a {
       font-size:14px;
     }
 
+    .btn-small:hover{
+      background: blue;
+      color:white;
+    }
+
     .controls{
       margin-top:14px;
       display:grid;
@@ -308,9 +324,12 @@ a {
     .tag{
       font-size:12px;
       padding:6px 10px;
-      background:#f1f1f1;
-      color:#222;
+      background:black;
+      color:white;
       white-space:nowrap;
+    }
+    .right:hover{
+      backgroundr: blue;
     }
 
     /* Print styles */

@@ -2,87 +2,102 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Add artwork</title>
+
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
   <div class="wrap">
     <div class="card">
+
       <h2>Add artwork</h2>
 
-      <form method="post" enctype="multipart/form-data">
-        <p>
-          <label>Title *</label><br>
-          <input required name="title" style="width:100%">
-        </p>
+      <form method="post" enctype="multipart/form-data" class="form">
 
-        <p>
-          <label>Year</label><br>
-          <input name="year">
-        </p>
+        <!-- BASIC INFO -->
+        <div class="section">
+          <label>Title <span class="req">*</span></label>
+          <input required name="title" placeholder="Artwork title">
+        </div>
 
-        <p>
-          <label>Series / Project</label><br>
-          <input name="series" style="width:100%">
-        </p>
+        <div class="section">
+          <label>Year <span class="req">*</span></label>
+          <input required name="year" placeholder="e.g. 2024">
+        </div>
 
-        <p>
-          <label>Medium *</label><br>
-          <input required name="medium" style="width:100%">
-        </p>
+        <div class="section">
+          <label>Series / Project <span class="req">*</span></label>
+          <input required name="series" placeholder="Optional">
+        </div>
 
-        <p>
-          <label>Dimensions</label><br>
-          <input name="dimensions" style="width:100%">
-        </p>
+        <div class="section">
+          <label>Medium <span class="req">*</span></label>
+          <input required name="medium" placeholder="e.g. Acrylic on canvas">
+        </div>
 
-        <p>
-          <label>Description</label><br>
-          <textarea name="description" rows="4" style="width:100%"></textarea>
-        </p>
+        <div class="section">
+          <label>Dimensions <span class="req">*</span></label>
+          <input requiered name="dimensions" placeholder="e.g. 120 × 80 cm">
+        </div>
 
-        <p>
-          <label>Edition type</label><br>
-          <select name="edition_type">
+        <!-- DESCRIPTION -->
+        <div class="section">
+          <label>Description</label>
+          <textarea name="description" rows="4" placeholder="Optional public description"></textarea>
+        </div>
+
+        <!-- EDITION -->
+        <div class="section">
+          <label>Edition type <span class="req">*</span></label>
+          <select requiered name="edition_type">
             <option value="">—</option>
-            <option>Unique</option>
-            <option>Editioned</option>
-            <option>AP</option>
+            <option value="Unique">Unique</option>
+            <option value="Editioned">Editioned</option>
+            <option value="AP">AP</option>
           </select>
-        </p>
+        </div>
 
-        <p>
-          <label>Edition info</label><br>
+        <div class="section">
+          <label>Edition info</label>
           <input name="edition_info" placeholder="e.g. 3/10">
-        </p>
+        </div>
 
-        <p>
-          <label>For sale?</label><br>
+        <!-- SALES -->
+        <div class="section">
+          <label>For sale?</label>
           <select name="for_sale">
             <option value="no">No</option>
             <option value="yes">Yes</option>
           </select>
-        </p>
+        </div>
 
-        <p>
-          <label>Price</label><br>
-          <input name="price">
-        </p>
+        <div class="section">
+          <label>Price</label>
+          <input name="price" placeholder="Optional">
+        </div>
 
-        <p>
-          <label>Notes (internal)</label><br>
-          <textarea name="notes" rows="3" style="width:100%"></textarea>
-        </p>
+        <!-- INTERNAL -->
+        <div class="section">
+          <label>Notes (internal)</label>
+          <textarea name="notes" rows="3" placeholder="Not shown on certificate"></textarea>
+        </div>
 
-        <p>
-          <label>Image</label><br>
+        <!-- IMAGE -->
+        <div class="section">
+          <label>Artwork image</label>
           <input type="file" name="image" accept="image/*">
-        </p>
+          <div class="hint">JPG / JPEG / PNG • used for certificates & previews</div>
+        </div>
 
-        <button class="btn" type="submit">Save artwork</button>
+        <!-- ACTIONS -->
+        <div class="actions">
+          <button class="btn primary" type="submit">Save artwork</button>
+          <a class="btn secondary" href="{{ url_for('artwork_list') }}">Cancel</a>
+        </div>
+
       </form>
 
-      <a class="back" href="/">← Back</a>
     </div>
   </div>
 </body>
