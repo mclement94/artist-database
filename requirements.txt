@@ -5,4 +5,3 @@ qrcode[pil]
 itsdangerous
 gunicorn
 playwright
-chromium
