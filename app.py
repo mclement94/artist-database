@@ -1,16 +1,25 @@
+import base64
 import io
 import json
 import os
 import re
 from datetime import datetime
+from typing import Any, Dict, Optional
 
 import qrcode
 from flask import (
-    Flask, Response, jsonify, redirect, render_template, request,
-    send_file, send_from_directory, url_for
+    Flask,
+    Response,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    send_file,
+    send_from_directory,
+    url_for,
 )
 from flask_sqlalchemy import SQLAlchemy
-from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from markupsafe import escape as html_escape
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
@@ -19,12 +28,12 @@ from reportlab.pdfgen import canvas
 from werkzeug.utils import secure_filename
 
 # ============================================================
-# Paths / Config
+# Paths / Storage (Render-friendly)
 # ============================================================
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
-# Render persistent disk is usually /var/data (ONLY if you attached a disk)
+# If you attached a Render persistent disk at /var/data, this will persist across deploys.
 DATA_DIR = os.environ.get("DATA_DIR") or ("/var/data" if os.path.isdir("/var/data") else BASE_DIR)
 os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -38,9 +47,12 @@ ALLOWED_ARTWORK_EXTENSIONS = {"jpg", "jpeg", "png"}
 
 ARTIST_NAME = os.environ.get("ARTIST_NAME", "Miet Warlop")
 
+# Important: make Playwright use the locally installed browsers (installed during build)
+# This MUST be set before importing playwright.
+os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", "0")
 
 # ============================================================
-# Flask + SQLAlchemy (binds)
+# Flask + SQLAlchemy
 # ============================================================
 
 app = Flask(__name__)
@@ -54,10 +66,10 @@ app.config.update(
 
 db = SQLAlchemy(app)
 
-
 # ============================================================
 # Models (MAIN DB)
 # ============================================================
+
 
 class Artwork(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -92,7 +104,7 @@ class LocationLog(db.Model):
     artwork = db.relationship("Artwork", backref="location_logs")
 
 
-# Legacy table (keep old DB compatible; not used by Unlayer pipeline)
+# Keep legacy table (safe to keep; not used by Unlayer pipeline)
 class CertificateTemplate(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     settings_json = db.Column(db.Text, nullable=False, default="{}")
@@ -101,8 +113,9 @@ class CertificateTemplate(db.Model):
 
 
 # ============================================================
-# Model (CERT DB) — Unlayer template storage
+# Models (CERT DB) — Unlayer template storage
 # ============================================================
+
 
 class UnlayerCertificateTemplate(db.Model):
     __bind_key__ = "cert"
@@ -110,7 +123,7 @@ class UnlayerCertificateTemplate(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     design_json = db.Column(db.Text, nullable=True)  # JSON string
-    html = db.Column(db.Text, nullable=True)         # exported HTML
+    html = db.Column(db.Text, nullable=True)  # exported HTML
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
@@ -119,8 +132,9 @@ with app.app_context():
 
 
 # ============================================================
-# Helpers
+# Utils
 # ============================================================
+
 
 def allowed_ext(filename: str, allowed: set[str]) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in allowed
@@ -135,8 +149,7 @@ def save_upload(file_storage) -> str:
 
 
 def public_base_url() -> str:
-    # IMPORTANT: set this in Render env:
-    # PUBLIC_BASE_URL=https://artist-database.onrender.com
+    # Used for QR links etc. (not needed for certificate PDF any more)
     return os.environ.get("PUBLIC_BASE_URL", request.url_root.rstrip("/"))
 
 
@@ -169,13 +182,8 @@ def get_or_create_unlayer_template() -> UnlayerCertificateTemplate:
     return tpl
 
 
-def wrap_full_html(inner_html: str, *, auto_print: bool = False) -> str:
-    # Museum-grade print CSS:
-    # - A4
-    # - no link styling
-    # - safe typography
-    # - optional auto print
-    auto_print_js = "window.onload = () => { window.print(); };" if auto_print else ""
+def wrap_full_html(inner_html: str) -> str:
+    # Print-safe + remove visible link styling / link artifacts in PDF viewers.
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -183,11 +191,12 @@ def wrap_full_html(inner_html: str, *, auto_print: bool = False) -> str:
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Certificate</title>
   <style>
-    @page {{ size: A4; margin: 18mm; }}
-    html, body {{ margin:0; padding:0; background:#fff; }}
-    body {{ font-family: Helvetica, Arial, sans-serif; color:#111; }}
+    @page {{ size: A4; margin: 20mm; }}
+    html, body {{ margin:0; padding:0; }}
     * {{ -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
-    img {{ max-width: 100%; height: auto; display:block; }}
+    img {{ max-width: 100%; height: auto; }}
+
+    /* Never show "link look" in PDF */
     a {{
       color: inherit !important;
       text-decoration: none !important;
@@ -197,72 +206,89 @@ def wrap_full_html(inner_html: str, *, auto_print: bool = False) -> str:
 </head>
 <body>
 {inner_html}
-<script>{auto_print_js}</script>
 </body>
 </html>"""
 
 
-def strip_artwork_image_module_from_unlayer_html(template_html: str) -> str:
-    """
-    If artwork has NO image, remove Unlayer image block that contains the placeholder
-    to avoid broken image icon/messages in browser print/PDF.
-    """
-    if not template_html:
-        return template_html
+def _safe_text(v: Any) -> str:
+    if v is None:
+        return "—"
+    s = str(v).strip()
+    return str(html_escape(s)) if s else "—"
 
-    token_pattern = r"(%%\s*artwork_image_url\s*%%|\[\[\s*artwork_image_url\s*\]\]|\{\{\s*artwork_image_url\s*\}\})"
-    html = template_html
 
-    # Remove <img> that has the token in src
+def artwork_image_data_uri(artwork: Artwork) -> str:
+    """
+    Returns a data: URI for the artwork image (so Playwright doesn't need to fetch anything).
+    If no image, returns "".
+    """
+    if not artwork.image_filename:
+        return ""
+
+    path = os.path.join(app.config["UPLOAD_FOLDER"], artwork.image_filename)
+    if not os.path.isfile(path):
+        return ""
+
+    ext = artwork.image_filename.rsplit(".", 1)[1].lower()
+    mime = "image/jpeg" if ext in ("jpg", "jpeg") else "image/png"
+
+    with open(path, "rb") as f:
+        b64 = base64.b64encode(f.read()).decode("ascii")
+
+    return f"data:{mime};base64,{b64}"
+
+
+def strip_empty_image_tags(html: str) -> str:
+    """
+    Removes <img> tags with empty src or placeholder src to avoid broken image icons in PDF.
+    """
+    if not html:
+        return html
+
+    # Remove <img ... src=""> or src=" " etc
     html = re.sub(
-        rf"<img\b[^>]*\bsrc=(['\"]).*?{token_pattern}.*?\1[^>]*>",
+        r"<img\b[^>]*\bsrc=(['\"])\s*\1[^>]*>",
         "",
         html,
         flags=re.IGNORECASE | re.DOTALL,
     )
 
-    # Remove any enclosing table that contains the token
-    html = re.sub(
-        rf"<table\b[^>]*>.*?{token_pattern}.*?</table>",
-        "",
-        html,
-        flags=re.IGNORECASE | re.DOTALL,
-    )
-
-    html = re.sub(r"\n{3,}", "\n\n", html)
     return html
 
 
-def merge_unlayer_html(template_html: str, artwork: Artwork, artwork_image_url: str) -> str:
+def merge_unlayer_html(template_html: str, artwork: Artwork) -> str:
     """
+    Replaces placeholders in Unlayer exported HTML.
     Supported placeholder styles:
-      %%tag%% (preferred)
-      [[tag]] (allowed)
-      {{tag}} (+ escaped variants)
-    """
-    def safe(v):
-        if v is None:
-            return "—"
-        s = str(v).strip()
-        return str(html_escape(s)) if s else "—"
+      - %%tag%%
+      - [[tag]]
+      - {{tag}}
+      - encoded variants: &#91;&#91;tag&#93;&#93;  / &#123;&#123;tag&#125;&#125;
+      - &lbrack;&lbrack;tag&rbrack;&rbrack; (sometimes seen)
 
-    values = {
-        "artist_name": safe(ARTIST_NAME),
-        "artwork_title": safe(artwork.title),
-        "year": safe(artwork.year),
-        "medium": safe(artwork.medium),
-        "dimensions": safe(artwork.dimensions),
-        "edition_info": safe(artwork.edition_info or "Unique"),
-        "artwork_id": safe(artwork.id),
-        "certificate_date": safe(datetime.utcnow().strftime("%Y-%m-%d")),
-        "artwork_image_url": str(html_escape(artwork_image_url or "")),
+    Main idea: you can type [[artist_name]] etc in Unlayer and it will merge.
+    """
+    img_uri = artwork_image_data_uri(artwork)
+
+    values: Dict[str, str] = {
+        "artist_name": _safe_text(ARTIST_NAME),
+        "artwork_title": _safe_text(artwork.title),
+        "year": _safe_text(artwork.year),
+        "medium": _safe_text(artwork.medium),
+        "dimensions": _safe_text(artwork.dimensions),
+        "edition_info": _safe_text(artwork.edition_info or "Unique"),
+        "artwork_id": _safe_text(artwork.id),
+        "certificate_date": _safe_text(datetime.utcnow().strftime("%Y-%m-%d")),
+        "artwork_image_url": str(html_escape(img_uri or "")),
         "signature_line": (
-            '<span style="display:inline-block;border-bottom:1px solid #111;'
+            '<span style="display:inline-block;'
+            'border-bottom:1px solid #111;'
             'min-width:260px;height:1.2em;vertical-align:baseline;"></span>'
         ),
     }
 
-    html = template_html or ""
+    out = template_html or ""
+
     for key, val in values.items():
         patterns = [
             re.compile(r"%%\s*" + re.escape(key) + r"\s*%%"),
@@ -270,16 +296,52 @@ def merge_unlayer_html(template_html: str, artwork: Artwork, artwork_image_url: 
             re.compile(r"\{\{\s*" + re.escape(key) + r"\s*\}\}"),
             re.compile(r"&#91;&#91;\s*" + re.escape(key) + r"\s*&#93;&#93;"),
             re.compile(r"&#123;&#123;\s*" + re.escape(key) + r"\s*&#125;&#125;"),
+            re.compile(r"&lbrack;&lbrack;\s*" + re.escape(key) + r"\s*&rbrack;&rbrack;"),
         ]
         for pat in patterns:
-            html = pat.sub(val, html)
+            out = pat.sub(val, out)
 
-    return html
+    # If artwork has no image -> remove empty image tags so the PDF never shows broken icons
+    if not img_uri:
+        out = strip_empty_image_tags(out)
+
+    return out
+
+
+def pdf_from_html_with_playwright(html: str) -> bytes:
+    """
+    Render HTML to PDF using Playwright WITHOUT navigating to your own URL.
+    This avoids Render network timeouts and makes the site much faster.
+    """
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(
+            args=[
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+            ]
+        )
+        page = browser.new_page()
+
+        # Set content directly (no network)
+        page.set_content(html, wait_until="load", timeout=60_000)
+        page.wait_for_timeout(200)
+
+        pdf_bytes = page.pdf(
+            format="A4",
+            print_background=True,
+            prefer_css_page_size=True,
+        )
+        browser.close()
+        return pdf_bytes
 
 
 # ============================================================
 # Uploads
 # ============================================================
+
 
 @app.route("/uploads/<path:filename>")
 def uploaded_file(filename):
@@ -289,6 +351,7 @@ def uploaded_file(filename):
 # ============================================================
 # Pages
 # ============================================================
+
 
 @app.route("/")
 def home():
@@ -311,6 +374,7 @@ def artwork_detail(artwork_id):
 # ============================================================
 # Create / Edit artworks
 # ============================================================
+
 
 @app.route("/add-artwork", methods=["GET", "POST"])
 def add_artwork():
@@ -377,6 +441,7 @@ def edit_artwork(artwork_id):
 # Certificate Designer (Unlayer)
 # ============================================================
 
+
 @app.route("/certificate-designer")
 def certificate_designer():
     sample = Artwork.query.order_by(Artwork.created_at.desc()).first()
@@ -397,11 +462,13 @@ def api_certificate_template_get():
         except Exception:
             design = None
 
-    return jsonify({
-        "id": tpl.id,
-        "design_json": design,
-        "updated_at": tpl.updated_at.isoformat() if tpl.updated_at else None
-    })
+    return jsonify(
+        {
+            "id": tpl.id,
+            "design_json": design,
+            "updated_at": tpl.updated_at.isoformat() if tpl.updated_at else None,
+        }
+    )
 
 
 @app.route("/api/certificate-template", methods=["POST"])
@@ -419,41 +486,32 @@ def api_certificate_template_save():
 
 
 # ============================================================
-# Certificate (HTML + Print)
+# Certificate render (HTML) + PDF (Playwright)
 # ============================================================
 
+
+@app.route("/artworks/<int:artwork_id>/certificate-render")
+def certificate_render(artwork_id):
+    artwork = Artwork.query.get_or_404(artwork_id)
+    tpl = get_or_create_unlayer_template()
+
+    if not tpl.html:
+        return Response(
+            "No Unlayer template saved yet. Go to /certificate-designer and click Save template.",
+            status=400,
+        )
+
+    merged = merge_unlayer_html(tpl.html, artwork)
+    return Response(wrap_full_html(merged), mimetype="text/html")
+
+
 @app.route("/artworks/<int:artwork_id>/certificate")
-def certificate_html(artwork_id):
+def certificate_pdf(artwork_id):
     """
-    Museum-grade HTML certificate. Users print/save-as-PDF in browser.
-    """
-    artwork = Artwork.query.get_or_404(artwork_id)
-    tpl = get_or_create_unlayer_template()
-
-    if not tpl.html:
-        return Response(
-            "No Unlayer template saved yet. Go to /certificate-designer and click Save template.",
-            status=400
-        )
-
-    base = public_base_url()
-
-    artwork_image_url = ""
-    if artwork.image_filename:
-        artwork_image_url = f"{base}{url_for('uploaded_file', filename=artwork.image_filename)}"
-
-    template_html = tpl.html
-    if not artwork_image_url:
-        template_html = strip_artwork_image_module_from_unlayer_html(template_html)
-
-    merged = merge_unlayer_html(template_html, artwork, artwork_image_url)
-    return Response(wrap_full_html(merged, auto_print=False), mimetype="text/html")
-
-
-@app.route("/artworks/<int:artwork_id>/certificate/print")
-def certificate_print(artwork_id):
-    """
-    Same HTML, but auto-opens browser print dialog (good UX for "Print" button).
+    Fast + reliable:
+    - generate merged HTML directly
+    - render with page.set_content (no network)
+    - embed image as base64 (no broken icons)
     """
     artwork = Artwork.query.get_or_404(artwork_id)
     tpl = get_or_create_unlayer_template()
@@ -461,26 +519,35 @@ def certificate_print(artwork_id):
     if not tpl.html:
         return Response(
             "No Unlayer template saved yet. Go to /certificate-designer and click Save template.",
-            status=400
+            status=400,
         )
 
-    base = public_base_url()
+    try:
+        merged = merge_unlayer_html(tpl.html, artwork)
+        full_html = wrap_full_html(merged)
+        pdf_bytes = pdf_from_html_with_playwright(full_html)
+    except Exception as e:
+        app.logger.exception("Certificate PDF generation failed")
+        return Response(
+            "Certificate PDF generation failed.\n\n"
+            "Check Render logs for the full traceback.\n\n"
+            f"Error: {html_escape(str(e))}\n",
+            mimetype="text/plain",
+            status=500,
+        )
 
-    artwork_image_url = ""
-    if artwork.image_filename:
-        artwork_image_url = f"{base}{url_for('uploaded_file', filename=artwork.image_filename)}"
-
-    template_html = tpl.html
-    if not artwork_image_url:
-        template_html = strip_artwork_image_module_from_unlayer_html(template_html)
-
-    merged = merge_unlayer_html(template_html, artwork, artwork_image_url)
-    return Response(wrap_full_html(merged, auto_print=True), mimetype="text/html")
+    return send_file(
+        io.BytesIO(pdf_bytes),
+        mimetype="application/pdf",
+        as_attachment=False,
+        download_name=f"certificate_{artwork_id}.pdf",
+    )
 
 
 # ============================================================
 # Box page (location logging)
 # ============================================================
+
 
 @app.route("/artworks/<int:artwork_id>/box", methods=["GET", "POST"])
 def box_page(artwork_id):
@@ -534,8 +601,9 @@ def box_page(artwork_id):
 
 
 # ============================================================
-# Box label PDF (QR) - stays ReportLab (fast)
+# Box label PDF (QR)
 # ============================================================
+
 
 @app.route("/artworks/<int:artwork_id>/box-label")
 def box_label_pdf(artwork_id):
