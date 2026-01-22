@@ -286,9 +286,11 @@ def pdf_from_url_with_playwright(url: str) -> bytes:
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as p:
-        browser = p.chromium.launch()
+        browser = p.chromium.launch(
+            args=["--no-sandbox", "--disable-setuid-sandbox"]
+        )
         page = browser.new_page()
-        page.goto(url, wait_until="networkidle")
+        page.goto(url, wait_until="networkidle", timeout=60_000)
         pdf_bytes = page.pdf(format="A4", print_background=True, prefer_css_page_size=True)
         browser.close()
         return pdf_bytes
