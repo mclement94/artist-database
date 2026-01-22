@@ -79,7 +79,7 @@
           <div class="actions">
             <a class="btn" href="{{ url_for('edit_artwork', artwork_id=artwork.id) }}">Edit artwork</a>
 
-            <a class="btn" href="{{ url_for('certificate_print', artwork_id=artwork.id) }}" target="_blank">
+            <a class="btn" href="{{ url_for('certificate_pdf', artwork_id=artwork.id) }}" target="_blank">
               Print / Save certificate (PDF)
             </a>
 
