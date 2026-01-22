@@ -6,68 +6,43 @@ from datetime import datetime
 
 import qrcode
 from flask import (
-    Flask,
-    Response,
-    jsonify,
-    redirect,
-    render_template,
-    request,
-    send_file,
-    send_from_directory,
-    url_for,
+    Flask, Response, jsonify, redirect, render_template, request,
+    send_file, send_from_directory, url_for
 )
 from flask_sqlalchemy import SQLAlchemy
-from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from markupsafe import escape as html_escape
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.lib.utils import ImageReader
-from reportlab.pdfgen import canvas as pdf_canvas
+from reportlab.pdfgen import canvas
 from werkzeug.utils import secure_filename
-
-# ============================================================
-# Hard requirements for Render + Playwright
-# ============================================================
-# IMPORTANT: must be set before importing Playwright anywhere.
-# We keep it here so gunicorn workers always inherit it.
-# This makes Playwright use its bundled .local-browsers folder (what your build downloaded).
-os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", "0")
 
 # ============================================================
 # Paths / Config
 # ============================================================
+
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
-# If you attached a Render persistent disk, mount it at /var/data (Render convention).
-# You can also override with DATA_DIR env var.
+# Render persistent disk is usually /var/data (ONLY if you attached a disk)
 DATA_DIR = os.environ.get("DATA_DIR") or ("/var/data" if os.path.isdir("/var/data") else BASE_DIR)
 os.makedirs(DATA_DIR, exist_ok=True)
 
 UPLOAD_DIR = os.path.join(DATA_DIR, "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-MAIN_DB_PATH = os.path.join(DATA_DIR, "database.db")  # existing DB
-CERT_DB_PATH = os.path.join(DATA_DIR, "certificate_templates.db")  # Unlayer template DB
+MAIN_DB_PATH = os.path.join(DATA_DIR, "database.db")
+CERT_DB_PATH = os.path.join(DATA_DIR, "certificate_templates.db")
 
 ALLOWED_ARTWORK_EXTENSIONS = {"jpg", "jpeg", "png"}
 
-# Set your real artist name here
 ARTIST_NAME = os.environ.get("ARTIST_NAME", "Miet Warlop")
-
-
-def public_base_url() -> str:
-    """
-    Production: set PUBLIC_BASE_URL to your Render URL (no trailing slash), e.g.
-      PUBLIC_BASE_URL=https://artist-database.onrender.com
-
-    Local dev: falls back to request.url_root
-    """
-    return os.environ.get("PUBLIC_BASE_URL", request.url_root.rstrip("/"))
 
 
 # ============================================================
 # Flask + SQLAlchemy (binds)
 # ============================================================
+
 app = Flask(__name__)
 app.config.update(
     SECRET_KEY=os.environ.get("SECRET_KEY", "dev-change-me"),
@@ -79,10 +54,10 @@ app.config.update(
 
 db = SQLAlchemy(app)
 
+
 # ============================================================
 # Models (MAIN DB)
 # ============================================================
-
 
 class Artwork(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -117,7 +92,7 @@ class LocationLog(db.Model):
     artwork = db.relationship("Artwork", backref="location_logs")
 
 
-# Legacy table (keeps old DB compatible; not used by the new certificate pipeline)
+# Legacy table (keep old DB compatible; not used by Unlayer pipeline)
 class CertificateTemplate(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     settings_json = db.Column(db.Text, nullable=False, default="{}")
@@ -129,14 +104,13 @@ class CertificateTemplate(db.Model):
 # Model (CERT DB) — Unlayer template storage
 # ============================================================
 
-
 class UnlayerCertificateTemplate(db.Model):
     __bind_key__ = "cert"
     __tablename__ = "unlayer_certificate_templates"
 
     id = db.Column(db.Integer, primary_key=True)
     design_json = db.Column(db.Text, nullable=True)  # JSON string
-    html = db.Column(db.Text, nullable=True)  # exported HTML
+    html = db.Column(db.Text, nullable=True)         # exported HTML
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
@@ -148,7 +122,6 @@ with app.app_context():
 # Helpers
 # ============================================================
 
-
 def allowed_ext(filename: str, allowed: set[str]) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in allowed
 
@@ -159,6 +132,12 @@ def save_upload(file_storage) -> str:
     final = f"{ts}_{filename}"
     file_storage.save(os.path.join(app.config["UPLOAD_FOLDER"], final))
     return final
+
+
+def public_base_url() -> str:
+    # IMPORTANT: set this in Render env:
+    # PUBLIC_BASE_URL=https://artist-database.onrender.com
+    return os.environ.get("PUBLIC_BASE_URL", request.url_root.rstrip("/"))
 
 
 def current_location(artwork_id: int):
@@ -190,12 +169,13 @@ def get_or_create_unlayer_template() -> UnlayerCertificateTemplate:
     return tpl
 
 
-def wrap_full_html(inner_html: str) -> str:
-    """
-    Print-safe wrapper:
-    - No link styling (prevents blue underlines / "broken link" look)
-    - Stable fonts (avoid remote font loads that can hang PDF render)
-    """
+def wrap_full_html(inner_html: str, *, auto_print: bool = False) -> str:
+    # Museum-grade print CSS:
+    # - A4
+    # - no link styling
+    # - safe typography
+    # - optional auto print
+    auto_print_js = "window.onload = () => { window.print(); };" if auto_print else ""
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -203,16 +183,11 @@ def wrap_full_html(inner_html: str) -> str:
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Certificate</title>
   <style>
-    @page {{ size: A4; margin: 20mm; }}
-    html, body {{ margin:0; padding:0; }}
-    * {{
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
-      font-family: Helvetica, Arial, sans-serif;
-    }}
-    img {{ max-width: 100%; height: auto; }}
-
-    /* Museum-grade: never show "link look" in PDF */
+    @page {{ size: A4; margin: 18mm; }}
+    html, body {{ margin:0; padding:0; background:#fff; }}
+    body {{ font-family: Helvetica, Arial, sans-serif; color:#111; }}
+    * {{ -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
+    img {{ max-width: 100%; height: auto; display:block; }}
     a {{
       color: inherit !important;
       text-decoration: none !important;
@@ -222,23 +197,23 @@ def wrap_full_html(inner_html: str) -> str:
 </head>
 <body>
 {inner_html}
+<script>{auto_print_js}</script>
 </body>
 </html>"""
 
 
 def strip_artwork_image_module_from_unlayer_html(template_html: str) -> str:
     """
-    If an artwork has NO image, remove any Unlayer image block that still contains
-    the artwork image placeholder. This prevents broken-image icons in the PDF.
+    If artwork has NO image, remove Unlayer image block that contains the placeholder
+    to avoid broken image icon/messages in browser print/PDF.
     """
     if not template_html:
         return template_html
 
-    token_pattern = r"(%%\s*artwork_image_url\s*%%|\[\[\s*artwork_image_url\s*\]\])"
-
+    token_pattern = r"(%%\s*artwork_image_url\s*%%|\[\[\s*artwork_image_url\s*\]\]|\{\{\s*artwork_image_url\s*\}\})"
     html = template_html
 
-    # Remove img tags that still contain the token
+    # Remove <img> that has the token in src
     html = re.sub(
         rf"<img\b[^>]*\bsrc=(['\"]).*?{token_pattern}.*?\1[^>]*>",
         "",
@@ -246,7 +221,7 @@ def strip_artwork_image_module_from_unlayer_html(template_html: str) -> str:
         flags=re.IGNORECASE | re.DOTALL,
     )
 
-    # Remove enclosing tables containing the token anywhere inside (Unlayer uses lots of tables)
+    # Remove any enclosing table that contains the token
     html = re.sub(
         rf"<table\b[^>]*>.*?{token_pattern}.*?</table>",
         "",
@@ -260,10 +235,10 @@ def strip_artwork_image_module_from_unlayer_html(template_html: str) -> str:
 
 def merge_unlayer_html(template_html: str, artwork: Artwork, artwork_image_url: str) -> str:
     """
-    Supported placeholders in saved Unlayer HTML:
-      %%tag%%  (preferred)
-      [[tag]]  (allowed)
-      {{tag}} + HTML-escaped variants (legacy compatibility)
+    Supported placeholder styles:
+      %%tag%% (preferred)
+      [[tag]] (allowed)
+      {{tag}} (+ escaped variants)
     """
     def safe(v):
         if v is None:
@@ -282,14 +257,12 @@ def merge_unlayer_html(template_html: str, artwork: Artwork, artwork_image_url: 
         "certificate_date": safe(datetime.utcnow().strftime("%Y-%m-%d")),
         "artwork_image_url": str(html_escape(artwork_image_url or "")),
         "signature_line": (
-            '<span style="display:inline-block;'
-            'border-bottom:1px solid #111;'
+            '<span style="display:inline-block;border-bottom:1px solid #111;'
             'min-width:260px;height:1.2em;vertical-align:baseline;"></span>'
         ),
     }
 
     html = template_html or ""
-
     for key, val in values.items():
         patterns = [
             re.compile(r"%%\s*" + re.escape(key) + r"\s*%%"),
@@ -304,91 +277,18 @@ def merge_unlayer_html(template_html: str, artwork: Artwork, artwork_image_url: 
     return html
 
 
-def pdf_from_url_with_playwright(url: str) -> bytes:
-    """
-    Render HTML route to PDF using Playwright, optimized for Render stability.
-
-    Key choices:
-    - wait_until="domcontentloaded" (more reliable than load/networkidle on hosted envs)
-    - longer timeout
-    - block slow/irrelevant resources (fonts, media) to avoid hanging
-    """
-    from playwright.sync_api import sync_playwright
-
-    base = os.environ.get("PUBLIC_BASE_URL", "").rstrip("/")
-
-    def should_allow_request(req_url: str) -> bool:
-        # Allow same-origin requests; block most external to reduce hang risk.
-        if not base:
-            return True
-        return req_url.startswith(base) or req_url.startswith("data:") or req_url.startswith("blob:")
-
-    with sync_playwright() as p:
-        browser = p.chromium.launch(
-            args=[
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-                "--disable-dev-shm-usage",
-            ]
-        )
-        page = browser.new_page()
-
-        # Intercept requests to prevent remote font/CDN hangs
-        def route_handler(route, req):
-            rtype = req.resource_type
-            req_url = req.url
-
-            # Block heavy/irrelevant types and most external traffic
-            if rtype in ("font", "media"):
-                return route.abort()
-
-            if not should_allow_request(req_url):
-                # Allow images if you really need them from external sources.
-                # But for stability, block external by default.
-                return route.abort()
-
-            return route.continue_()
-
-        page.route("**/*", route_handler)
-
-        # Fast reliable navigation
-        page.goto(url, wait_until="domcontentloaded", timeout=120_000)
-
-        # Ensure content exists
-        page.wait_for_selector("body", timeout=30_000)
-
-        # Settle layout
-        page.wait_for_timeout(800)
-
-        pdf_bytes = page.pdf(
-            format="A4",
-            print_background=True,
-            prefer_css_page_size=True,
-        )
-
-        browser.close()
-        return pdf_bytes
-
-
 # ============================================================
 # Uploads
 # ============================================================
-
 
 @app.route("/uploads/<path:filename>")
 def uploaded_file(filename):
     return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
 
 
-@app.route("/favicon.ico")
-def favicon():
-    return Response(status=204)
-
-
 # ============================================================
 # Pages
 # ============================================================
-
 
 @app.route("/")
 def home():
@@ -411,7 +311,6 @@ def artwork_detail(artwork_id):
 # ============================================================
 # Create / Edit artworks
 # ============================================================
-
 
 @app.route("/add-artwork", methods=["GET", "POST"])
 def add_artwork():
@@ -478,7 +377,6 @@ def edit_artwork(artwork_id):
 # Certificate Designer (Unlayer)
 # ============================================================
 
-
 @app.route("/certificate-designer")
 def certificate_designer():
     sample = Artwork.query.order_by(Artwork.created_at.desc()).first()
@@ -499,13 +397,11 @@ def api_certificate_template_get():
         except Exception:
             design = None
 
-    return jsonify(
-        {
-            "id": tpl.id,
-            "design_json": design,
-            "updated_at": tpl.updated_at.isoformat() if tpl.updated_at else None,
-        }
-    )
+    return jsonify({
+        "id": tpl.id,
+        "design_json": design,
+        "updated_at": tpl.updated_at.isoformat() if tpl.updated_at else None
+    })
 
 
 @app.route("/api/certificate-template", methods=["POST"])
@@ -523,26 +419,27 @@ def api_certificate_template_save():
 
 
 # ============================================================
-# Certificate render (HTML) + PDF (Playwright)
+# Certificate (HTML + Print)
 # ============================================================
 
-
-@app.route("/artworks/<int:artwork_id>/certificate-render")
-def certificate_render(artwork_id):
+@app.route("/artworks/<int:artwork_id>/certificate")
+def certificate_html(artwork_id):
+    """
+    Museum-grade HTML certificate. Users print/save-as-PDF in browser.
+    """
     artwork = Artwork.query.get_or_404(artwork_id)
     tpl = get_or_create_unlayer_template()
 
     if not tpl.html:
         return Response(
             "No Unlayer template saved yet. Go to /certificate-designer and click Save template.",
-            status=400,
+            status=400
         )
 
     base = public_base_url()
 
     artwork_image_url = ""
     if artwork.image_filename:
-        # IMPORTANT: absolute URL so headless chrome can fetch it
         artwork_image_url = f"{base}{url_for('uploaded_file', filename=artwork.image_filename)}"
 
     template_html = tpl.html
@@ -550,41 +447,40 @@ def certificate_render(artwork_id):
         template_html = strip_artwork_image_module_from_unlayer_html(template_html)
 
     merged = merge_unlayer_html(template_html, artwork, artwork_image_url)
-    return Response(wrap_full_html(merged), mimetype="text/html")
+    return Response(wrap_full_html(merged, auto_print=False), mimetype="text/html")
 
 
-@app.route("/artworks/<int:artwork_id>/certificate")
-def certificate_pdf(artwork_id):
-    render_url = public_base_url() + url_for("certificate_render", artwork_id=artwork_id)
+@app.route("/artworks/<int:artwork_id>/certificate/print")
+def certificate_print(artwork_id):
+    """
+    Same HTML, but auto-opens browser print dialog (good UX for "Print" button).
+    """
+    artwork = Artwork.query.get_or_404(artwork_id)
+    tpl = get_or_create_unlayer_template()
 
-    try:
-        pdf_bytes = pdf_from_url_with_playwright(render_url)
-    except Exception as e:
-        app.logger.exception("Certificate PDF generation failed")
+    if not tpl.html:
         return Response(
-            "Certificate PDF generation failed.\n\n"
-            f"Render URL: {render_url}\n\n"
-            "Checklist:\n"
-            "- Render env var: PUBLIC_BASE_URL=https://artist-database.onrender.com\n"
-            "- Start command: gunicorn app:app --timeout 180 --workers 1\n"
-            "- Build command: pip install -r requirements.txt && python -m playwright install chromium\n\n"
-            f"Error: {html_escape(str(e))}\n",
-            mimetype="text/plain",
-            status=500,
+            "No Unlayer template saved yet. Go to /certificate-designer and click Save template.",
+            status=400
         )
 
-    return send_file(
-        io.BytesIO(pdf_bytes),
-        mimetype="application/pdf",
-        as_attachment=False,
-        download_name=f"certificate_{artwork_id}.pdf",
-    )
+    base = public_base_url()
+
+    artwork_image_url = ""
+    if artwork.image_filename:
+        artwork_image_url = f"{base}{url_for('uploaded_file', filename=artwork.image_filename)}"
+
+    template_html = tpl.html
+    if not artwork_image_url:
+        template_html = strip_artwork_image_module_from_unlayer_html(template_html)
+
+    merged = merge_unlayer_html(template_html, artwork, artwork_image_url)
+    return Response(wrap_full_html(merged, auto_print=True), mimetype="text/html")
 
 
 # ============================================================
 # Box page (location logging)
 # ============================================================
-
 
 @app.route("/artworks/<int:artwork_id>/box", methods=["GET", "POST"])
 def box_page(artwork_id):
@@ -597,7 +493,7 @@ def box_page(artwork_id):
     if token:
         try:
             data = verify_box_token(token)
-            can_update = data.get("artwork_id") == artwork_id
+            can_update = (data.get("artwork_id") == artwork_id)
         except (BadSignature, SignatureExpired):
             token_error = "Invalid or expired QR code."
 
@@ -638,9 +534,8 @@ def box_page(artwork_id):
 
 
 # ============================================================
-# Box label PDF (QR)
+# Box label PDF (QR) - stays ReportLab (fast)
 # ============================================================
-
 
 @app.route("/artworks/<int:artwork_id>/box-label")
 def box_label_pdf(artwork_id):
@@ -656,7 +551,7 @@ def box_label_pdf(artwork_id):
     qr_buf.seek(0)
 
     buf = io.BytesIO()
-    c = pdf_canvas.Canvas(buf, pagesize=A4)
+    c = canvas.Canvas(buf, pagesize=A4)
 
     qr_size = 60 * mm
     c.drawImage(ImageReader(qr_buf), 120 * mm, 160 * mm, qr_size, qr_size)
@@ -678,5 +573,4 @@ def box_label_pdf(artwork_id):
 
 
 if __name__ == "__main__":
-    # Local dev only. On Render, use gunicorn start command.
     app.run(host="127.0.0.1", port=5000, debug=True)
