@@ -292,6 +292,9 @@ def pdf_from_url_with_playwright(url: str) -> bytes:
     - small settle time
     - no-sandbox flags
     """
+   
+    os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", "0")
+
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as p:
