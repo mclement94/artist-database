@@ -4,3 +4,4 @@ reportlab
 qrcode[pil]
 itsdangerous
 gunicorn
+playwright
