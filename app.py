@@ -287,13 +287,28 @@ def pdf_from_url_with_playwright(url: str) -> bytes:
 
     with sync_playwright() as p:
         browser = p.chromium.launch(
-            args=["--no-sandbox", "--disable-setuid-sandbox"]
+            args=[
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+            ]
         )
         page = browser.new_page()
-        page.goto(url, wait_until="networkidle", timeout=60_000)
-        pdf_bytes = page.pdf(format="A4", print_background=True, prefer_css_page_size=True)
+
+        # "networkidle" often hangs on hosted environments.
+        page.goto(url, wait_until="load", timeout=60_000)
+
+        # small settle time for layout/images/fonts
+        page.wait_for_timeout(500)
+
+        pdf_bytes = page.pdf(
+            format="A4",
+            print_background=True,
+            prefer_css_page_size=True
+        )
         browser.close()
         return pdf_bytes
+
 
 
 # ============================================================
