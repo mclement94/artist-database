@@ -2,6 +2,8 @@ import base64
 import io
 import json
 import os
+os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "0"
+
 import re
 from datetime import datetime
 from typing import Any, Dict, Optional
@@ -504,8 +506,8 @@ def certificate_render(artwork_id):
     merged = merge_unlayer_html(tpl.html, artwork)
     return Response(wrap_full_html(merged), mimetype="text/html")
 
-
-@app.route("/artworks/<int:artwork_id>/certificate")
+@app.route("/artworks/<int:artwork_id>/certificate", endpoint="certificate_pdf")
+@app.route("/artworks/<int:artwork_id>/certificate", endpoint="certificate_print")
 def certificate_pdf(artwork_id):
     """
     Fast + reliable:
