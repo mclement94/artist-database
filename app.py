@@ -2,11 +2,9 @@ import base64
 import io
 import json
 import os
-os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "0"
-
 import re
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 import qrcode
 from flask import (
@@ -30,6 +28,12 @@ from reportlab.pdfgen import canvas
 from werkzeug.utils import secure_filename
 
 # ============================================================
+# Environment (Render + Playwright)
+# ============================================================
+# IMPORTANT: keep this at the very top so Playwright (imported later) uses local browsers.
+os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", "0")
+
+# ============================================================
 # Paths / Storage (Render-friendly)
 # ============================================================
 
@@ -48,10 +52,6 @@ CERT_DB_PATH = os.path.join(DATA_DIR, "certificate_templates.db")
 ALLOWED_ARTWORK_EXTENSIONS = {"jpg", "jpeg", "png"}
 
 ARTIST_NAME = os.environ.get("ARTIST_NAME", "Miet Warlop")
-
-# Important: make Playwright use the locally installed browsers (installed during build)
-# This MUST be set before importing playwright.
-os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", "0")
 
 # ============================================================
 # Flask + SQLAlchemy
@@ -132,7 +132,6 @@ class UnlayerCertificateTemplate(db.Model):
 with app.app_context():
     db.create_all()
 
-
 # ============================================================
 # Utils
 # ============================================================
@@ -151,7 +150,7 @@ def save_upload(file_storage) -> str:
 
 
 def public_base_url() -> str:
-    # Used for QR links etc. (not needed for certificate PDF any more)
+    # Used for QR links etc.
     return os.environ.get("PUBLIC_BASE_URL", request.url_root.rstrip("/"))
 
 
@@ -242,20 +241,16 @@ def artwork_image_data_uri(artwork: Artwork) -> str:
 
 def strip_empty_image_tags(html: str) -> str:
     """
-    Removes <img> tags with empty src or placeholder src to avoid broken image icons in PDF.
+    Removes <img> tags with empty src to avoid broken icons in PDF.
     """
     if not html:
         return html
-
-    # Remove <img ... src=""> or src=" " etc
-    html = re.sub(
+    return re.sub(
         r"<img\b[^>]*\bsrc=(['\"])\s*\1[^>]*>",
         "",
         html,
         flags=re.IGNORECASE | re.DOTALL,
     )
-
-    return html
 
 
 def merge_unlayer_html(template_html: str, artwork: Artwork) -> str:
@@ -267,8 +262,6 @@ def merge_unlayer_html(template_html: str, artwork: Artwork) -> str:
       - {{tag}}
       - encoded variants: &#91;&#91;tag&#93;&#93;  / &#123;&#123;tag&#125;&#125;
       - &lbrack;&lbrack;tag&rbrack;&rbrack; (sometimes seen)
-
-    Main idea: you can type [[artist_name]] etc in Unlayer and it will merge.
     """
     img_uri = artwork_image_data_uri(artwork)
 
@@ -303,7 +296,6 @@ def merge_unlayer_html(template_html: str, artwork: Artwork) -> str:
         for pat in patterns:
             out = pat.sub(val, out)
 
-    # If artwork has no image -> remove empty image tags so the PDF never shows broken icons
     if not img_uri:
         out = strip_empty_image_tags(out)
 
@@ -313,7 +305,7 @@ def merge_unlayer_html(template_html: str, artwork: Artwork) -> str:
 def pdf_from_html_with_playwright(html: str) -> bytes:
     """
     Render HTML to PDF using Playwright WITHOUT navigating to your own URL.
-    This avoids Render network timeouts and makes the site much faster.
+    This avoids Render network timeouts and is much faster.
     """
     from playwright.sync_api import sync_playwright
 
@@ -326,10 +318,8 @@ def pdf_from_html_with_playwright(html: str) -> bytes:
             ]
         )
         page = browser.new_page()
-
-        # Set content directly (no network)
         page.set_content(html, wait_until="load", timeout=60_000)
-        page.wait_for_timeout(200)
+        page.wait_for_timeout(150)
 
         pdf_bytes = page.pdf(
             format="A4",
@@ -362,8 +352,17 @@ def home():
 
 @app.route("/artworks")
 def artwork_list():
-    artworks = Artwork.query.order_by(Artwork.created_at.desc()).all()
-    return render_template("artwork_list.html", artworks=artworks)
+    # Filter: ?status=for_sale | sold | (blank = all)
+    status = (request.args.get("status") or "").strip().lower()
+
+    q = Artwork.query.order_by(Artwork.created_at.desc())
+    if status == "for_sale":
+        q = q.filter(Artwork.for_sale.is_(True))
+    elif status == "sold":
+        q = q.filter(Artwork.for_sale.is_(False))
+
+    artworks = q.all()
+    return render_template("artwork_list.html", artworks=artworks, status=status)
 
 
 @app.route("/artworks/<int:artwork_id>")
@@ -374,7 +373,7 @@ def artwork_detail(artwork_id):
 
 
 # ============================================================
-# Create / Edit artworks
+# Create / Edit / Delete artworks
 # ============================================================
 
 
@@ -437,6 +436,27 @@ def edit_artwork(artwork_id):
         return redirect(url_for("artwork_detail", artwork_id=artwork.id))
 
     return render_template("edit_artwork.html", artwork=artwork)
+
+
+@app.route("/artworks/<int:artwork_id>/delete", methods=["POST"])
+def delete_artwork(artwork_id):
+    artwork = Artwork.query.get_or_404(artwork_id)
+
+    # delete related logs first (no cascade configured)
+    LocationLog.query.filter_by(artwork_id=artwork.id).delete()
+
+    # delete uploaded image file (optional)
+    if artwork.image_filename:
+        try:
+            path = os.path.join(app.config["UPLOAD_FOLDER"], artwork.image_filename)
+            if os.path.isfile(path):
+                os.remove(path)
+        except Exception:
+            app.logger.exception("Failed to delete image file for artwork %s", artwork.id)
+
+    db.session.delete(artwork)
+    db.session.commit()
+    return redirect(url_for("artwork_list"))
 
 
 # ============================================================
@@ -506,14 +526,16 @@ def certificate_render(artwork_id):
     merged = merge_unlayer_html(tpl.html, artwork)
     return Response(wrap_full_html(merged), mimetype="text/html")
 
+
+# One real URL, plus one alias endpoint (different URL) so templates can call either name.
 @app.route("/artworks/<int:artwork_id>/certificate", endpoint="certificate_pdf")
-@app.route("/artworks/<int:artwork_id>/certificate", endpoint="certificate_print")
+@app.route("/artworks/<int:artwork_id>/certificate-print", endpoint="certificate_print")
 def certificate_pdf(artwork_id):
     """
     Fast + reliable:
     - generate merged HTML directly
     - render with page.set_content (no network)
-    - embed image as base64 (no broken icons)
+    - embed image as base64
     """
     artwork = Artwork.query.get_or_404(artwork_id)
     tpl = get_or_create_unlayer_template()
