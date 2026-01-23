@@ -149,6 +149,10 @@ a {
   font-size: 16px;
 }
 
+.textlist {
+  margin-left: 50px;
+}
+
 /* --------------------------------------------------
    Print
 -------------------------------------------------- */
@@ -160,7 +164,8 @@ a {
 
   .btn,
   .back,
-  .no-print {
+  .no-print,
+  .btn-delete {
     display: none !important;
   }
 
@@ -259,6 +264,21 @@ a {
 
     .btn-small:hover{
       background: blue;
+      color:white;
+    }
+
+    .btn-delete{
+      padding:6px 7px;
+      font-size: 12px;
+      background-color: black;
+      border:1px solid #eee;
+      color: white;
+    }
+
+    .btn-delete:hover{
+      font-size: 12px;
+      background-color: red;
+      border:1px solid #eee;
       color:white;
     }
 

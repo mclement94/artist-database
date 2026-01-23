@@ -5,9 +5,6 @@
   <title>Artworks</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <style>
-
-  </style>
 </head>
 <body>
   <div class="wrap">
@@ -51,9 +48,17 @@
           </select>
         </div>
 
-        <div class="chips">
+        <div class="chips" style="gap:8px; flex-wrap:wrap;">
           <span class="chip">Total: <strong id="total">{{ artworks|length }}</strong></span>
           <span class="chip">Shown: <strong id="shown">{{ artworks|length }}</strong></span>
+
+          <!-- server-side status filter buttons -->
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <a class="btn-small {% if not status %}active{% endif %}" href="{{ url_for('artwork_list') }}">All</a>
+            <a class="btn-small {% if status=='for_sale' %}active{% endif %}" href="{{ url_for('artwork_list', status='for_sale') }}">For sale</a>
+            <a class="btn-small {% if status=='sold' %}active{% endif %}" href="{{ url_for('artwork_list', status='sold') }}">Sold</a>
+          </div>
+
           <button class="btn-small" id="resetBtn" type="button">Reset</button>
           <span class="muted" id="activeText"></span>
         </div>
@@ -62,43 +67,59 @@
       {% if artworks and artworks|length > 0 %}
         <div class="items" id="items">
           {% for artwork in artworks %}
-            <a class="rowlink"
-               href="{{ url_for('artwork_detail', artwork_id=artwork.id) }}"
-               data-medium="{{ (artwork.medium or '')|lower|e }}"
-               data-year="{{ (artwork.year or '')|lower|e }}"
-               data-project="{{ (artwork.series or '')|lower|e }}"
-               data-search="{{ (
-                 (artwork.title or '') ~ ' ' ~
-                 (artwork.medium or '') ~ ' ' ~
-                 (artwork.series or '') ~ ' ' ~
-                 (artwork.year or '') ~ ' ' ~
-                 (artwork.id|string)
-               )|lower|e }}"
+            <div class="row"
+              data-medium="{{ (artwork.medium or '')|lower|e }}"
+              data-year="{{ (artwork.year or '')|lower|e }}"
+              data-project="{{ (artwork.series or '')|lower|e }}"
+              data-search="{{ (
+                (artwork.title or '') ~ ' ' ~
+                (artwork.medium or '') ~ ' ' ~
+                (artwork.series or '') ~ ' ' ~
+                (artwork.year or '') ~ ' ' ~
+                (artwork.id|string)
+              )|lower|e }}"
             >
-              <div class="item">
-                <div class="thumb">
-                  {% if artwork.image_filename %}
-                    <img src="{{ url_for('uploaded_file', filename=artwork.image_filename) }}" alt="">
-                
-                  {% endif %}
-                </div>
-
-                <div>
-                  <div class="title">{{ artwork.title }}</div>
-                  <div class="meta">
-                    {{ artwork.year or "—" }} · {{ artwork.medium or "—" }}
-                    {% if artwork.series %} · {{ artwork.series }}{% endif %}
-                    · ID {{ artwork.id }}
+              <a class="rowlink"
+                 href="{{ url_for('artwork_detail', artwork_id=artwork.id) }}"
+                 style="text-decoration:none; color:inherit; flex:1; min-width:0;"
+              >
+                <div class="item">
+                  <div class="thumb">
+                    {% if artwork.image_filename %}
+                      <img src="{{ url_for('uploaded_file', filename=artwork.image_filename) }}" alt="">
+                    {% endif %}
                   </div>
-                </div>
 
-                <div class="right">
-                  {% if artwork.for_sale %}
-                    <span class="tag">For sale</span>
-                  {% endif %}
-                </div>  
+                  <div class="textlist">
+                    <div class="title">{{ artwork.title }}</div>
+                    <div class="meta">
+                      {{ artwork.year or "—" }} · {{ artwork.medium or "—" }}
+                      {% if artwork.series %} · {{ artwork.series }}{% endif %}
+                      · ID {{ artwork.id }}
+                    </div>
+                  </div>
+
+                  <div class="right">
+                           <!-- actions (not inside the <a>, so it won’t break clicks) -->
+              <div style="display:flex; align-items:center; gap:8px;">
+                <form method="post"
+                      action="{{ url_for('delete_artwork', artwork_id=artwork.id) }}"
+                      onsubmit="return confirm('Delete this artwork? This cannot be undone.');"
+                      style="margin:0;"
+                >
+                  <button type="submit" class="btn-delete" style="opacity:.85;">Delete</button>
+                </form>
               </div>
-            </a>
+                    {% if artwork.for_sale %}
+                      <span class="tag">For sale</span>
+                    {% else %}
+                      <span class="tag" style="opacity:.65;">Sold</span>
+                    {% endif %}
+                  </div>
+             
+                </div>
+              </a>
+            </div>
           {% endfor %}
         </div>
 
@@ -146,7 +167,7 @@
         activeText.textContent = active.length ? active.join(' · ') : '';
 
         let count = 0;
-        const rows = items.querySelectorAll('a.rowlink');
+        const rows = items.querySelectorAll('.row');
 
         rows.forEach(row => {
           const ds = row.dataset;
