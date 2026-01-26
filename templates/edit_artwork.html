@@ -141,7 +141,7 @@
           <label>Image</label>
 
           {% if artwork.image_filename %}
-            <img src="{{ url_for('static', filename='uploads/' ~ artwork.image_filename) }}">
+            <img src="{{ url_for('artworks.static', filename='uploads/' ~ artwork.image_filename) }}">
             <div class="muted">Uploading a new image will replace the current one.</div>
           {% else %}
             <div class="muted">No image uploaded yet.</div>

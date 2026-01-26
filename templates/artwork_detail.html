@@ -18,7 +18,7 @@
         <div>
           <div class="imgbox">
             {% if artwork.image_filename %}
-              <img src="{{ url_for('uploaded_file', filename=artwork.image_filename) }}" alt="Artwork image">
+              <img src="{{ url_for('artworks.uploaded_file', filename=artwork.image_filename) }}" alt="Artwork image">
             {% else %}
               <div class="empty">No image</div>
             {% endif %}

@@ -31,7 +31,7 @@
           <div class="imgbox">
             {% if artwork.image_filename %}
               <!-- IMPORTANT: this uses the /uploads route, not static/uploads -->
-              <img src="{{ url_for('uploaded_file', filename=artwork.image_filename) }}" alt="Artwork image">
+              <img src="{{ url_for('artworks.uploaded_file', filename=artwork.image_filename) }}" alt="Artwork image">
             {% endif %}
           </div>
 
