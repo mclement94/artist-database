@@ -1,17 +1,28 @@
+# ----------------------
 # Python
+# ----------------------
+venv/
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
 
-# Virtual environment
-.venv/
-venv/
+# ----------------------
+# Flask / local data
+# ----------------------
+*.db
+uploads/
+instance/
 
-# Local database
-database.db
+# ----------------------
+# Environment variables
+# ----------------------
+.env
 
-# Uploaded files
-static/uploads/
-
-# OS
+# ----------------------
+# OS / editor junk
+# ----------------------
 .DS_Store
-
+Thumbs.db
+.vscode/
+.idea/

@@ -38,13 +38,13 @@
     </div>
 
     <div class="right">
-      <a class="btn-small" href="{{ url_for('home') }}">Home</a>
+      <a class="btn-small" href="{{ url_for('main.home') }}">Home</a>
       <button class="btn-small" id="btnReload" type="button">Reload saved</button>
       <button class="btn-small primary" id="btnSave" type="button">Save template</button>
 
       {% if sample %}
         <a class="btn-small" target="_blank"
-           href="{{ url_for('certificate_pdf', artwork_id=sample.id) }}">Preview PDF (latest artwork)</a>
+           href="{{ url_for('certificates.certificate_pdf', artwork_id=sample.id) }}">Preview PDF (latest artwork)</a>
       {% endif %}
     </div>
   </div>

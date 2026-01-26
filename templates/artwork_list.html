@@ -13,7 +13,7 @@
       <div class="headerbar">
         <h2 style="margin:0;">List Of Artworks</h2>
         <div class="header-actions">
-          <a class="btn" href="{{ url_for('add_artwork') }}">Add artwork</a>
+          <a class="btn" href="{{ url_for('artworks.add_artwork') }}">Add artwork</a>
           <button class="btn" id="printBtn" type="button">Print page</button>
         </div>
       </div>
@@ -54,9 +54,9 @@
 
           <!-- server-side status filter buttons -->
           <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-            <a class="btn-small {% if not status %}active{% endif %}" href="{{ url_for('artwork_list') }}">All</a>
-            <a class="btn-small {% if status=='for_sale' %}active{% endif %}" href="{{ url_for('artwork_list', status='for_sale') }}">For sale</a>
-            <a class="btn-small {% if status=='sold' %}active{% endif %}" href="{{ url_for('artwork_list', status='sold') }}">Sold</a>
+            <a class="btn-small {% if not status %}active{% endif %}" href="{{ url_for('artworks.artwork_list') }}">All</a>
+            <a class="btn-small {% if status=='for_sale' %}active{% endif %}" href="{{ url_for('artworks.artwork_list', status='for_sale') }}">For sale</a>
+            <a class="btn-small {% if status=='sold' %}active{% endif %}" href="{{ url_for('artworks.artwork_list', status='sold') }}">Sold</a>
           </div>
 
           <button class="btn-small" id="resetBtn" type="button">Reset</button>
@@ -80,7 +80,7 @@
               )|lower|e }}"
             >
               <a class="rowlink"
-                 href="{{ url_for('artwork_detail', artwork_id=artwork.id) }}"
+                 href="{{ url_for('artworks.artwork_detail', artwork_id=artwork.id) }}"
                  style="text-decoration:none; color:inherit; flex:1; min-width:0;"
               >
                 <div class="item">
@@ -103,7 +103,7 @@
                            <!-- actions (not inside the <a>, so it won’t break clicks) -->
               <div style="display:flex; align-items:center; gap:8px;">
                 <form method="post"
-                      action="{{ url_for('delete_artwork', artwork_id=artwork.id) }}"
+                      action="{{ url_for('artworks.delete_artwork', artwork_id=artwork.id) }}"
                       onsubmit="return confirm('Delete this artwork? This cannot be undone.');"
                       style="margin:0;"
                 >
@@ -130,7 +130,7 @@
         <p class="muted" style="margin-top:14px;">No artworks yet.</p>
       {% endif %}
 
-      <a class="back" href="{{ url_for('home') }}">← Home</a>
+      <a class="back" href="{{ url_for('main.home') }}">← Home</a>
     </div>
   </div>
 
