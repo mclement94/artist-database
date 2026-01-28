@@ -71,17 +71,17 @@
           <input name="title" value="{{ artwork.title }}" required>
         </div>
 
-        <div class="row split">
-          <div>
-            <label>Year</label>
-            <input name="year" value="{{ artwork.year }}">
-          </div>
+          <div class="row split">
+            <div>
+              <label>Year</label>
+              <input name="year" value="{{ artwork.year }}">
+            </div>
 
-          <div>
-            <label>Series / Project</label>
-            <input name="series" value="{{ artwork.series }}">
+            <div>
+              <label>Series / Project</label>
+              <input name="series" value="{{ artwork.series }}">
+            </div>
           </div>
-        </div>
 
         <div class="row split">
           <div>
@@ -114,10 +114,11 @@
 
         <div class="row split">
           <div>
-            <label>For sale?</label>
-            <select name="for_sale">
-              <option value="no" {% if not artwork.for_sale %}selected{% endif %}>No</option>
-              <option value="yes" {% if artwork.for_sale %}selected{% endif %}>Yes</option>
+            <label>Status</label>
+            <select name="status">
+              <option value="working" {% if artwork.status == "working" %}selected{% endif %}>🔵 Working on</option>
+              <option value="for_sale" {% if artwork.status == "for_sale" %}selected{% endif %}>🟢 For sale</option>
+              <option value="sold" {% if artwork.status == "sold" %}selected{% endif %}>🔴 Sold</option>
             </select>
           </div>
 
@@ -141,7 +142,7 @@
           <label>Image</label>
 
           {% if artwork.image_filename %}
-            <img src="{{ url_for('artworks.static', filename='uploads/' ~ artwork.image_filename) }}">
+            <img src="{{ url_for('artworks.uploaded_file', filename=artwork.image_filename) }}">
             <div class="muted">Uploading a new image will replace the current one.</div>
           {% else %}
             <div class="muted">No image uploaded yet.</div>

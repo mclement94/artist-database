@@ -77,7 +77,11 @@
           </div>
 
           <div class="actions">
-            <a class="btn" href="{{ url_for('artworks.edit_artwork', artwork_id=artwork.id) }}">Edit artwork</a>
+            {% if artwork.status != 'sold' %}
+              <a class="btn" href="{{ url_for('artworks.edit_artwork', artwork_id=artwork.id) }}">Edit artwork</a>
+            {% else %}
+              <button class="btn" disabled style="opacity:0.5; cursor:not-allowed;">Edit artwork (sold - locked)</button>
+            {% endif %}
 
             <a class="btn" href="{{ url_for('certificates.certificate_pdf', artwork_id=artwork.id) }}" target="_blank">
               Print / Save certificate (PDF)

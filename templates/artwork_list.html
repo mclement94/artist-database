@@ -55,12 +55,31 @@
           <!-- server-side status filter buttons -->
           <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
             <a class="btn-small {% if not status %}active{% endif %}" href="{{ url_for('artworks.artwork_list') }}">All</a>
-            <a class="btn-small {% if status=='for_sale' %}active{% endif %}" href="{{ url_for('artworks.artwork_list', status='for_sale') }}">For sale</a>
-            <a class="btn-small {% if status=='sold' %}active{% endif %}" href="{{ url_for('artworks.artwork_list', status='sold') }}">Sold</a>
+            <a class="btn-small {% if status=='working' %}active{% endif %}" href="{{ url_for('artworks.artwork_list', status='working') }}">🔵 Working</a>
+            <a class="btn-small {% if status=='for_sale' %}active{% endif %}" href="{{ url_for('artworks.artwork_list', status='for_sale') }}">🟢 For sale</a>
+            <a class="btn-small {% if status=='sold' %}active{% endif %}" href="{{ url_for('artworks.artwork_list', status='sold') }}">🔴 Sold</a>
           </div>
 
           <button class="btn-small" id="resetBtn" type="button">Reset</button>
           <span class="muted" id="activeText"></span>
+        </div>
+
+        <!-- Bulk edit section (hidden by default) -->
+        <div id="bulkEditSection" style="display:none; margin-top:16px; padding:12px; background:#f5f5f5; border-radius:4px; border:1px solid #ddd;">
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <span style="font-weight:500;"><span id="selectedCount">0</span> selected</span>
+            <select id="bulkField" style="padding:6px; border:1px solid #ccc; border-radius:4px;">
+              <option value="">Choose a field to update...</option>
+              <option value="status">Status</option>
+              <option value="price">Price</option>
+              <option value="series">Project/Series</option>
+              <option value="year">Year</option>
+              <option value="notes">Notes</option>
+            </select>
+            <input id="bulkValue" type="text" placeholder="New value..." style="padding:6px; border:1px solid #ccc; border-radius:4px; flex:1; max-width:200px;">
+            <button id="bulkApplyBtn" class="btn-small" type="button" style="background:#28a745; color:white; border:none; cursor:pointer;">Apply to Selected</button>
+            <button id="bulkCancelBtn" class="btn-small" type="button" style="background:#6c757d; color:white; border:none; cursor:pointer;">Cancel</button>
+          </div>
         </div>
       </div>
 
@@ -68,9 +87,11 @@
         <div class="items" id="items">
           {% for artwork in artworks %}
             <div class="row"
+              data-artwork-id="{{ artwork.id }}"
               data-medium="{{ (artwork.medium or '')|lower|e }}"
               data-year="{{ (artwork.year or '')|lower|e }}"
               data-project="{{ (artwork.series or '')|lower|e }}"
+              data-status="{{ (artwork.status or 'working')|lower|e }}"
               data-search="{{ (
                 (artwork.title or '') ~ ' ' ~
                 (artwork.medium or '') ~ ' ' ~
@@ -79,11 +100,13 @@
                 (artwork.id|string)
               )|lower|e }}"
             >
-              <a class="rowlink"
+              <div class="item" style="display:flex; align-items:center; gap:12px;">
+                <input type="checkbox" class="artwork-checkbox" value="{{ artwork.id }}" style="width:18px; height:18px; cursor:pointer; flex-shrink:0;">
+
+                <a class="rowlink"
                  href="{{ url_for('artworks.artwork_detail', artwork_id=artwork.id) }}"
-                 style="text-decoration:none; color:inherit; flex:1; min-width:0;"
+                 style="text-decoration:none; color:inherit; flex:1; min-width:0; display:flex; align-items:center; gap:12px;"
               >
-                <div class="item">
                   <div class="thumb">
                     {% if artwork.image_filename %}
                       <img src="{{ url_for('artworks.uploaded_file', filename=artwork.image_filename) }}" alt="">
@@ -98,8 +121,9 @@
                       · ID {{ artwork.id }}
                     </div>
                   </div>
+                </a>
 
-                  <div class="right">
+                <div class="right">
                            <!-- actions (not inside the <a>, so it won’t break clicks) -->
               <div style="display:flex; align-items:center; gap:8px;">
                 <form method="post"
@@ -110,15 +134,16 @@
                   <button type="submit" class="btn-delete" style="opacity:.85;">Delete</button>
                 </form>
               </div>
-                    {% if artwork.for_sale %}
-                      <span class="tag">For sale</span>
+                    {% if artwork.status == 'for_sale' %}
+                      <span class="tag tag-for-sale">🟢 For sale</span>
+                    {% elif artwork.status == 'sold' %}
+                      <span class="tag tag-sold">🔴 Sold</span>
                     {% else %}
-                      <span class="tag" style="opacity:.65;">Sold</span>
+                      <span class="tag tag-working">🔵 Working on</span>
                     {% endif %}
                   </div>
-             
                 </div>
-              </a>
+              </div>
             </div>
           {% endfor %}
         </div>
@@ -149,7 +174,26 @@
       const resetBtn = document.getElementById('resetBtn');
       const printBtn = document.getElementById('printBtn');
 
+      // Bulk edit elements
+      const bulkEditSection = document.getElementById('bulkEditSection');
+      const bulkField = document.getElementById('bulkField');
+      const bulkValue = document.getElementById('bulkValue');
+      const bulkApplyBtn = document.getElementById('bulkApplyBtn');
+      const bulkCancelBtn = document.getElementById('bulkCancelBtn');
+      const selectedCount = document.getElementById('selectedCount');
+
       const norm = (v) => (v || '').toString().trim().toLowerCase();
+
+      function getSelectedCheckboxes() {
+        return Array.from(document.querySelectorAll('.artwork-checkbox:checked'));
+      }
+
+      function updateBulkUI() {
+        const selected = getSelectedCheckboxes();
+        const hasSelection = selected.length > 0;
+        selectedCount.textContent = selected.length;
+        bulkEditSection.style.display = hasSelection ? '' : 'none';
+      }
 
       function apply(){
         if (!items) return;
@@ -183,7 +227,71 @@
 
         shown.textContent = String(count);
         if (emptyState) emptyState.style.display = count === 0 ? '' : 'none';
+        
+        updateBulkUI();
       }
+
+      async function applyBulkUpdate() {
+        const selected = getSelectedCheckboxes();
+        const field = bulkField.value;
+        const value = bulkValue.value;
+
+        if (!field) {
+          alert('Please select a field to update');
+          return;
+        }
+
+        if (!value && field !== 'for_sale') {
+          alert('Please enter a value');
+          return;
+        }
+
+        const artworkIds = selected.map(cb => parseInt(cb.value));
+
+        try {
+          const response = await fetch('{{ url_for("artworks.bulk_update_artworks") }}', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              artwork_ids: artworkIds,
+              field: field,
+              value: value
+            })
+          });
+
+          const data = await response.json();
+
+          if (!response.ok) {
+            alert('Error: ' + (data.error || 'Unknown error'));
+            return;
+          }
+
+          alert(data.message || 'Update successful!');
+          
+          // Reload the page to reflect changes
+          location.reload();
+        } catch (error) {
+          alert('Error: ' + error.message);
+        }
+      }
+
+      // Event listeners for checkboxes
+      document.addEventListener('change', (e) => {
+        if (e.target.classList.contains('artwork-checkbox')) {
+          updateBulkUI();
+        }
+      });
+
+      // Bulk edit buttons
+      if (bulkApplyBtn) bulkApplyBtn.addEventListener('click', applyBulkUpdate);
+      if (bulkCancelBtn) bulkCancelBtn.addEventListener('click', () => {
+        document.querySelectorAll('.artwork-checkbox').forEach(cb => cb.checked = false);
+        bulkField.value = '';
+        bulkValue.value = '';
+        updateBulkUI();
+      });
 
       function reset(){
         q.value = '';

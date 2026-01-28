@@ -26,6 +26,7 @@ class Artwork(db.Model):
     edition_type = db.Column(db.String(50))
     edition_info = db.Column(db.String(50))
 
+    status = db.Column(db.String(50), default="working")  # working, for_sale, sold
     for_sale = db.Column(db.Boolean, default=False)
     price = db.Column(db.String(50))
 

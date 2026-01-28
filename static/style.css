@@ -348,6 +348,18 @@ a {
       color:white;
       white-space:nowrap;
     }
+    .tag-working {
+      background: #3b82f6; /* Blue for working on */
+      color: white;
+    }
+    .tag-for-sale {
+      background: #22c55e; /* Green for for sale */
+      color: white;
+    }
+    .tag-sold {
+      background: #ef4444; /* Red for sold */
+      color: white;
+    }
     .right:hover{
       backgroundr: blue;
     }

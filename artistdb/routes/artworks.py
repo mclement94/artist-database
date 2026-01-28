@@ -5,7 +5,7 @@ Kept clean by calling services for uploads and "box" location.
 """
 
 import os
-from flask import Blueprint, current_app, redirect, render_template, request, send_from_directory, url_for
+from flask import Blueprint, current_app, jsonify, redirect, render_template, request, send_from_directory, url_for
 
 from ..extensions import db
 from ..models import Artwork, LocationLog
@@ -22,14 +22,12 @@ def uploaded_file(filename):
 
 @bp.route("/artworks")
 def artwork_list():
-    """List artworks with optional status filter (for_sale / sold)."""
+    """List artworks with optional status filter (working / for_sale / sold)."""
     status = (request.args.get("status") or "").strip().lower()
 
     q = Artwork.query.order_by(Artwork.created_at.desc())
-    if status == "for_sale":
-        q = q.filter(Artwork.for_sale.is_(True))
-    elif status == "sold":
-        q = q.filter(Artwork.for_sale.is_(False))
+    if status in ["working", "for_sale", "sold"]:
+        q = q.filter(Artwork.status == status)
 
     artworks = q.all()
     return render_template("artwork_list.html", artworks=artworks, status=status)
@@ -63,6 +61,7 @@ def add_artwork():
             description=request.form.get("description"),
             edition_type=request.form.get("edition_type"),
             edition_info=request.form.get("edition_info"),
+            status=request.form.get("status", "working"),
             for_sale=(request.form.get("for_sale") == "yes"),
             price=request.form.get("price"),
             notes=request.form.get("notes"),
@@ -88,6 +87,7 @@ def edit_artwork(artwork_id):
         artwork.description = request.form.get("description")
         artwork.edition_type = request.form.get("edition_type")
         artwork.edition_info = request.form.get("edition_info")
+        artwork.status = request.form.get("status", "working")
         artwork.for_sale = (request.form.get("for_sale") == "yes")
         artwork.price = request.form.get("price")
         artwork.notes = request.form.get("notes")
@@ -124,3 +124,52 @@ def delete_artwork(artwork_id):
     db.session.delete(artwork)
     db.session.commit()
     return redirect(url_for("artworks.artwork_list"))
+
+
+@bp.route("/artworks/bulk-update", methods=["POST"])
+def bulk_update_artworks():
+    """
+    Bulk update multiple artworks with the same setting.
+    Expects JSON: { artwork_ids: [1, 2, 3], field: "status", value: "for_sale" }
+    For sold artworks: only colorcode can be changed.
+    """
+    data = request.get_json()
+    
+    if not data or not data.get("artwork_ids") or not data.get("field") or data.get("value") is None:
+        return jsonify({"error": "Missing artwork_ids, field, or value"}), 400
+    
+    artwork_ids = data["artwork_ids"]
+    field = data["field"]
+    value = data["value"]
+    
+    # Whitelist of allowed fields to update (prevent injection)
+    allowed_fields = ["status", "for_sale", "price", "notes", "series", "year"]
+    
+    if field not in allowed_fields:
+        return jsonify({"error": f"Field '{field}' is not allowed for bulk update"}), 400
+    
+    try:
+        artworks = Artwork.query.filter(Artwork.id.in_(artwork_ids)).all()
+        
+        # Filter out sold artworks - they cannot be edited
+        sold_ids = [a.id for a in artworks if a.status == "sold"]
+        editable_artworks = [a for a in artworks if a.status != "sold"]
+        
+        for artwork in editable_artworks:
+            if field == "for_sale":
+                # Convert string to boolean
+                setattr(artwork, field, value in [True, "true", "True", "yes", "1"])
+            else:
+                setattr(artwork, field, value)
+        
+        db.session.commit()
+        
+        message = f"Updated {len(editable_artworks)} artwork(s)"
+        if sold_ids:
+            message += f". {len(sold_ids)} sold artwork(s) were skipped (cannot edit sold items)."
+        
+        return jsonify({"success": True, "message": message}), 200
+    
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
