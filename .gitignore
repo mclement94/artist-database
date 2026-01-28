@@ -18,6 +18,8 @@ instance/
 # Environment variables
 # ----------------------
 .env
+.venv/
+venv/
 
 # ----------------------
 # OS / editor junk
@@ -26,3 +28,7 @@ instance/
 Thumbs.db
 .vscode/
 .idea/
+.venv/
+venv/
+__pycache__/
+*.pyc
