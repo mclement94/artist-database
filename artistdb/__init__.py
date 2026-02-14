@@ -39,8 +39,8 @@ def create_app() -> Flask:
         db.create_all()
 
     with app.app_context():
-    from artistdb import models
-    db.create_all()
+        from artistdb import models
+        db.create_all()
 
     from .services.schema import ensure_artwork_status_column
     ensure_artwork_status_column()
