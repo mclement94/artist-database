@@ -38,6 +38,13 @@ def create_app() -> Flask:
         from . import models  # ensures models are registered before create_all()
         db.create_all()
 
+    with app.app_context():
+    from artistdb import models
+    db.create_all()
+
+    from .services.schema import ensure_artwork_status_column
+    ensure_artwork_status_column()
+
     # Register route blueprints (each feature in its own file)
     app.register_blueprint(main_bp)
     app.register_blueprint(artworks_bp)
