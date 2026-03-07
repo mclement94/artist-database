@@ -375,6 +375,7 @@ a {
       .item { break-inside: avoid; }
       .rowlink { text-decoration:none !important; }
       .tag { display:none !important; }
+      .artwork-checkbox { display:none !important; }
     }
 
     @media (max-width: 980px){
