@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Print Designer</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Print Designer</h1>
+      <p>Choose artworks to generate a full-A4 print-ready PDF. Each selected artwork is rendered on its own page with all available images.</p>
+
+      {% if artworks %}
+        <form id="print-form" action="{{ url_for('certificates.print_designer_pdf') }}" method="get">
+          <div class="grid artwork-picker-grid">
+            {% for artwork in artworks %}
+              <label class="picker-card">
+                <input type="checkbox" name="ids" value="{{ artwork.id }}">
+                <strong>{{ artwork.title }}</strong>
+                <span>{{ artwork.year or '—' }} · {{ artwork.medium or '—' }}</span>
+                <small>{{ artwork.series or '' }}</small>
+              </label>
+            {% endfor %}
+          </div>
+
+          <div class="button-row">
+            <button class="btn primary" type="submit">Download print PDF</button>
+          </div>
+        </form>
+      {% else %}
+        <p>No artworks are available yet. Add artworks first, then return here to generate a print PDF.</p>
+      {% endif %}
+
+      <p><a class="btn" href="{{ url_for('home') }}">Back to home</a></p>
+    </div>
+  </div>
+</body>
+</html>

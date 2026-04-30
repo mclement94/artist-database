@@ -102,6 +102,19 @@ def edit_artwork(artwork_id):
         artwork.notes = request.form.get("notes")
 
         existing_images = artwork.images
+        delete_filenames = request.form.getlist("delete_image_filenames")
+        if delete_filenames:
+            existing_images = [f for f in existing_images if f not in delete_filenames]
+            if artwork.certificate_image_filename in delete_filenames:
+                artwork.certificate_image_filename = None
+            for filename in delete_filenames:
+                try:
+                    path = os.path.join(current_app.config["UPLOAD_FOLDER"], filename)
+                    if os.path.isfile(path):
+                        os.remove(path)
+                except Exception:
+                    current_app.logger.exception("Failed to delete artwork image file %s", filename)
+
         new_files = [f for f in request.files.getlist("images") if f and f.filename]
         if not new_files:
             image = request.files.get("image")
@@ -116,6 +129,8 @@ def edit_artwork(artwork_id):
 
         if existing_images:
             artwork.images = existing_images
+        else:
+            artwork.images = None
 
         selected_certificate = request.form.get("certificate_image_filename")
         if selected_certificate and selected_certificate in artwork.images:

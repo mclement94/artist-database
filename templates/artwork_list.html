@@ -15,7 +15,6 @@
         <div class="header-actions">
           <a class="btn" href="{{ url_for('artworks.add_artwork') }}">Add artwork</a>
           <button class="btn" id="printBtn" type="button">Print page</button>
-          <button class="btn" id="printSelectedBtn" type="button">Print selected</button>
         </div>
       </div>
 
@@ -314,20 +313,8 @@
         el.addEventListener('change', apply);
       });
 
-      const printSelectedBtn = document.getElementById('printSelectedBtn');
-
       if (resetBtn) resetBtn.addEventListener('click', reset);
       if (printBtn) printBtn.addEventListener('click', function(){ window.print(); });
-      if (printSelectedBtn) printSelectedBtn.addEventListener('click', function(){
-        const selected = getSelectedCheckboxes();
-        if (!selected.length) {
-          alert('Please select at least one artwork to print.');
-          return;
-        }
-        const artworkIds = selected.map(cb => cb.value).join(',');
-        const url = '{{ url_for("certificates.multi_artwork_pdf") }}?ids=' + encodeURIComponent(artworkIds);
-        window.open(url, '_blank');
-      });
 
       apply();
     })();

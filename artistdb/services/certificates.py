@@ -168,21 +168,26 @@ def render_multiple_artworks_html(artworks: list[Artwork], *, artist_name: str, 
     cards = []
     for artwork in artworks:
         image_uri = artwork_image_data_uri(artwork, upload_folder)
+        image_html = (
+            f'<img src="{image_uri}" alt="{html_escape(artwork.title or "Artwork image")}">'
+            if image_uri
+            else '<div class="no-image">No image</div>'
+        )
         cards.append(f"""
-        <section class=\"artwork-card\">
-          <div class=\"headline\">
+        <section class="artwork-card">
+          <div class="headline">
             <div>
               <h1>{html_escape(artwork.title or '')}</h1>
-              <div class=\"subtitle\">ID {html_escape(artwork.id)} · {html_escape(artwork.year or '—')} · {html_escape(artwork.medium or '—')}</div>
+              <div class="subtitle">ID {html_escape(artwork.id)} · {html_escape(artwork.year or '—')} · {html_escape(artwork.medium or '—')}</div>
             </div>
-            <div class=\"meta\">{html_escape(artist_name)}</div>
+            <div class="meta">{html_escape(artist_name)}</div>
           </div>
 
-          <div class=\"body\">
-            <div class=\"image-frame\">
-              {f'<img src=\"{image_uri}\" alt=\"{html_escape(artwork.title or 'Artwork image')}\">' if image_uri else '<div class=\"no-image\">No image</div>'}
+          <div class="body">
+            <div class="image-frame">
+              {image_html}
             </div>
-            <div class=\"details\">
+            <div class="details">
               <p><strong>Series / Project:</strong> {html_escape(artwork.series or '—')}</p>
               <p><strong>Dimensions:</strong> {html_escape(artwork.dimensions or '—')}</p>
               <p><strong>Edition:</strong> {html_escape(artwork.edition_type or '—')} {html_escape(artwork.edition_info or '')}</p>
@@ -195,14 +200,14 @@ def render_multiple_artworks_html(artworks: list[Artwork], *, artist_name: str, 
         """)
 
     header = f"""
-    <header class=\"document-header\">
+    <header class="document-header">
       <h1>Artwork selection</h1>
-      <div class=\"document-meta\">{html_escape(artist_name)} · {html_escape(datetime.utcnow().strftime('%Y-%m-%d'))}</div>
+      <div class="document-meta">{html_escape(artist_name)} · {html_escape(datetime.utcnow().strftime('%Y-%m-%d'))}</div>
     </header>
     """
 
     return f"""
-    <div class=\"multi-artwork-sheet\">
+    <div class="multi-artwork-sheet">
       {header}
       {''.join(cards)}
     </div>

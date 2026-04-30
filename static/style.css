@@ -214,6 +214,41 @@ a {
       gap: 10px 16px;
       margin-top: 8px;
     }
+    .button-row {
+      margin-top: 24px;
+    }
+    .artwork-picker-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(215px, 1fr));
+      gap: 14px;
+      margin-top: 18px;
+    }
+    .picker-card {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 16px;
+      border: 1px solid #ddd;
+      background: #fafafa;
+      cursor: pointer;
+      transition: border-color 0.2s ease, background 0.2s ease;
+    }
+    .picker-card:hover {
+      border-color: #111;
+      background: #fff;
+    }
+    .picker-card input {
+      width: auto;
+      margin: 0;
+    }
+    .picker-card strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+    .picker-card span,
+    .picker-card small {
+      color: #555;
+    }
     .k {
       font-weight: 600;
       color: #222;
