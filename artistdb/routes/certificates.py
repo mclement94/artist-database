@@ -17,12 +17,15 @@ from ..extensions import db
 from ..models import Artwork
 from ..services.certificates import (
     get_or_create_unlayer_template,
+    get_or_create_unlayer_print_template,
     merge_unlayer_html,
+    merge_unlayer_print_html,
     pdf_from_html_with_playwright,
+    render_multiple_artworks_html,
+    render_print_layout_pages_html,
     template_json_for_editor,
     wrap_full_html,
 )
-from ..services.print_pdf import generate_multi_artwork_pdf
 
 bp = Blueprint("certificates", __name__)
 
@@ -84,6 +87,43 @@ def certificate_render(artwork_id):
     return Response(wrap_full_html(merged), mimetype="text/html")
 
 
+@bp.route("/print-layout-designer")
+def print_layout_designer():
+    sample = Artwork.query.order_by(Artwork.created_at.desc()).first()
+    return render_template(
+        "print_layout_designer.html",
+        sample=sample,
+        unlayer_project_id=current_app.config.get("UNLAYER_PROJECT_ID") or None,
+    )
+
+
+@bp.route("/api/print-template", methods=["GET"])
+def api_print_template_get():
+    tpl = get_or_create_unlayer_print_template()
+    design = template_json_for_editor(tpl)
+    return jsonify(
+        {
+            "id": tpl.id,
+            "design_json": design,
+            "updated_at": tpl.updated_at.isoformat() if tpl.updated_at else None,
+        }
+    )
+
+
+@bp.route("/api/print-template", methods=["POST"])
+def api_print_template_save():
+    tpl = get_or_create_unlayer_print_template()
+    payload = request.get_json(force=True, silent=False)
+
+    if not payload or "design_json" not in payload or "html" not in payload:
+        return "Missing design_json/html", 400
+
+    tpl.design_json = json.dumps(payload["design_json"])
+    tpl.html = payload["html"]
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
 @bp.route("/print-designer")
 def print_designer():
     artworks = Artwork.query.order_by(Artwork.created_at.desc()).all()
@@ -105,12 +145,24 @@ def print_designer_pdf():
     if not artworks:
         return Response("No artworks found for the selected IDs.", status=404)
 
+    tpl = get_or_create_unlayer_print_template()
     try:
-        pdf_bytes = generate_multi_artwork_pdf(
-            artworks,
-            artist_name=current_app.config["ARTIST_NAME"],
-            upload_folder=current_app.config["UPLOAD_FOLDER"],
-        )
+        if tpl.html:
+            merged = render_print_layout_pages_html(
+                artworks,
+                template_html=tpl.html,
+                artist_name=current_app.config["ARTIST_NAME"],
+                upload_folder=current_app.config["UPLOAD_FOLDER"],
+            )
+        else:
+            merged = render_multiple_artworks_html(
+                artworks,
+                artist_name=current_app.config["ARTIST_NAME"],
+                upload_folder=current_app.config["UPLOAD_FOLDER"],
+            )
+
+        full_html = wrap_full_html(merged)
+        pdf_bytes = pdf_from_html_with_playwright(full_html)
     except Exception as e:
         current_app.logger.exception("Print designer PDF generation failed")
         return Response(

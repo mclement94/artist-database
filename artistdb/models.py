@@ -102,3 +102,16 @@ class UnlayerCertificateTemplate(db.Model):
     design_json = db.Column(db.Text, nullable=True)  # JSON string
     html = db.Column(db.Text, nullable=True)         # exported HTML
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class UnlayerPrintTemplate(db.Model):
+    """
+    Stored in the "cert" bind database as well, but used for print page layouts.
+    """
+    __bind_key__ = "cert"
+    __tablename__ = "unlayer_print_templates"
+
+    id = db.Column(db.Integer, primary_key=True)
+    design_json = db.Column(db.Text, nullable=True)
+    html = db.Column(db.Text, nullable=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

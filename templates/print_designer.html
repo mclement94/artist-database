@@ -10,7 +10,7 @@
   <div class="wrap">
     <div class="card">
       <h1>Print Designer</h1>
-      <p>Choose artworks to generate a full-A4 print-ready PDF. Each selected artwork is rendered on its own page with all available images.</p>
+      <p>Choose artworks to generate a full-A4 print-ready PDF using the saved page layout from the Print Layout Designer.</p>
 
       {% if artworks %}
         <form id="print-form" action="{{ url_for('certificates.print_designer_pdf') }}" method="get">

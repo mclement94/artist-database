@@ -20,12 +20,12 @@ from markupsafe import escape as html_escape
 from playwright.sync_api import sync_playwright
 
 from ..extensions import db
-from ..models import Artwork, UnlayerCertificateTemplate
+from ..models import Artwork, UnlayerCertificateTemplate, UnlayerPrintTemplate
 
 
 def get_or_create_unlayer_template() -> UnlayerCertificateTemplate:
     """
-    Your app uses a single template row with id=1.
+    Your app uses a single certificate template row with id=1.
     If it doesn't exist yet, create it.
     """
     tpl = UnlayerCertificateTemplate.query.get(1)
@@ -34,6 +34,79 @@ def get_or_create_unlayer_template() -> UnlayerCertificateTemplate:
         db.session.add(tpl)
         db.session.commit()
     return tpl
+
+
+def get_or_create_unlayer_print_template() -> UnlayerPrintTemplate:
+    """
+    Your app uses a single print-layout template row with id=1.
+    If it doesn't exist yet, create it.
+    """
+    tpl = UnlayerPrintTemplate.query.get(1)
+    if not tpl:
+        tpl = UnlayerPrintTemplate(id=1, design_json=None, html=None)
+        db.session.add(tpl)
+        db.session.commit()
+    return tpl
+
+
+def merge_unlayer_print_html(template_html: str, artwork: Artwork, *, artist_name: str, upload_folder: str) -> str:
+    """
+    Replace placeholders in the print-layout template with artwork values.
+    """
+    img_uri = artwork_image_data_uri(artwork, upload_folder)
+    values = {
+        "artist_name": _safe_text(artist_name),
+        "artwork_title": _safe_text(artwork.title),
+        "year": _safe_text(artwork.year),
+        "medium": _safe_text(artwork.medium),
+        "dimensions": _safe_text(artwork.dimensions),
+        "edition_info": _safe_text(artwork.edition_info or "Unique"),
+        "artwork_id": _safe_text(artwork.id),
+        "artwork_image_url": str(html_escape(img_uri or "")),
+        "series": _safe_text(artwork.series),
+        "status": _safe_text(artwork.status),
+        "price": _safe_text(artwork.price),
+        "notes": _safe_text(artwork.notes),
+        "description": _safe_text(artwork.description),
+    }
+
+    out = template_html or ""
+    for key, val in values.items():
+        patterns = [
+            re.compile(r"%%\s*" + re.escape(key) + r"\s*%%"),
+            re.compile(r"\[\[\s*" + re.escape(key) + r"\s*\]\]"),
+            re.compile(r"\{\{\s*" + re.escape(key) + r"\s*\}\}"),
+            re.compile(r"&#91;&#91;\s*" + re.escape(key) + r"\s*&#93;&#93;"),
+            re.compile(r"&#123;&#123;\s*" + re.escape(key) + r"\s*&#125;&#125;"),
+            re.compile(r"&lbrack;&lbrack;\s*" + re.escape(key) + r"\s*&rbrack;&rbrack;"),
+        ]
+        for pat in patterns:
+            out = pat.sub(val, out)
+
+    if not img_uri:
+        out = strip_empty_image_tags(out)
+
+    return out
+
+
+def render_print_layout_pages_html(artworks: list[Artwork], *, template_html: str, artist_name: str, upload_folder: str) -> str:
+    pages = []
+    for artwork in artworks:
+        page_html = merge_unlayer_print_html(
+            template_html,
+            artwork,
+            artist_name=artist_name,
+            upload_folder=upload_folder,
+        )
+        pages.append(f"<section class=\"print-page\">{page_html}</section>")
+
+    return f"""
+    <style>
+      .print-page {{ page-break-after: always; break-after: page; }}
+      .print-page:last-child {{ page-break-after: auto; }}
+    </style>
+    {''.join(pages)}
+    """
 
 
 def wrap_full_html(inner_html: str) -> str:

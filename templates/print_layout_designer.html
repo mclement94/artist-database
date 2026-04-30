@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Print Layout Designer</title>
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+  <style>
+    .topbar{
+      display:flex; gap:10px; justify-content:space-between; align-items:center;
+      flex-wrap:wrap; padding:14px 18px; border-bottom:1px solid #eee; background:#fff;
+      position:sticky; top:0; z-index:10;
+    }
+    .left,.right{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .status{ color:#666; font-size:13px; }
+    #editorWrap{ height: calc(100vh - 70px); }
+    #editor{ height: 100%; }
+    .btn-small{
+      padding:10px 12px; border:1px solid #eee; background:#fff; cursor:pointer;
+      font-family:inherit; font-size:14px;
+    }
+    .btn-small.primary{ background:#111; color:#fff; border-color:#111; }
+    .btn-small.primary:hover{ opacity:0.9; }
+    .hint { font-size:12px; color:#666; }
+  </style>
+
+  <script src="https://editor.unlayer.com/embed.js"></script>
+</head>
+<body>
+
+  <div class="topbar">
+    <div class="left">
+      <strong>Print Layout Designer</strong>
+      <span class="status" id="status">Loading…</span>
+      <span class="hint">Tip: set image URL to <code>[[artwork_image_url]]</code></span>
+    </div>
+
+    <div class="right">
+      <a class="btn-small" href="{{ url_for('main.home') }}">Home</a>
+      <button class="btn-small" id="btnReload" type="button">Reload saved</button>
+      <button class="btn-small primary" id="btnSave" type="button">Save layout</button>
+
+      {% if sample %}
+        <a class="btn-small" target="_blank"
+           href="{{ url_for('certificates.print_designer_pdf') }}?ids={{ sample.id }}">Preview PDF (latest artwork)</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div id="editorWrap">
+    <div id="editor"></div>
+  </div>
+
+  <script>
+    const STATUS = document.getElementById('status');
+    const setStatus = (msg) => { STATUS.textContent = msg; };
+
+    const MERGE_TAGS = [
+      { name: "Artist name", value: "%%artist_name%%" },
+      { name: "Artwork title", value: "%%artwork_title%%" },
+      { name: "Year", value: "%%year%%" },
+      { name: "Medium", value: "%%medium%%" },
+      { name: "Dimensions", value: "%%dimensions%%" },
+      { name: "Edition", value: "%%edition_info%%" },
+      { name: "Artwork ID", value: "%%artwork_id%%" },
+      { name: "Image URL", value: "%%artwork_image_url%%" },
+      { name: "Series", value: "%%series%%" },
+      { name: "Status", value: "%%status%%" },
+      { name: "Price", value: "%%price%%" },
+      { name: "Notes", value: "%%notes%%" },
+      { name: "Description", value: "%%description%%" }
+    ];
+
+    async function apiGetTemplate(){
+      const res = await fetch("/api/print-template", { cache: "no-store" });
+      if(!res.ok) throw new Error("Failed to load template");
+      return await res.json();
+    }
+
+    async function apiSaveTemplate(payload){
+      const res = await fetch("/api/print-template", {
+        method: "POST",
+        headers: { "Content-Type":"application/json" },
+        body: JSON.stringify(payload)
+      });
+      if(!res.ok){
+        const txt = await res.text().catch(()=> "");
+        throw new Error("Save failed: " + txt);
+      }
+      return await res.json();
+    }
+
+    async function loadSavedIntoEditor(){
+      const data = await apiGetTemplate();
+      if (data && data.design_json){
+        unlayer.loadDesign(data.design_json);
+        return;
+      }
+      unlayer.loadDesign({
+        body: { rows: [], values: { backgroundColor: "#ffffff", contentWidth: "800px" } }
+      });
+    }
+
+    function saveTemplate(){
+      setStatus("Exporting…");
+      unlayer.exportHtml(async function(data){
+        try{
+          setStatus("Saving…");
+          await apiSaveTemplate({ design_json: data.design, html: data.html });
+          setStatus("Saved ✅");
+        }catch(e){
+          console.error(e);
+          setStatus("Save failed ❌");
+          alert(e.message || "Save failed");
+        }
+      });
+    }
+
+    function initEditor(){
+      const projectId = {{ (unlayer_project_id if unlayer_project_id else "null") | safe }};
+      const opts = {
+        id: "editor",
+        displayMode: "web",
+        tools: {
+          heading: { enabled: true },
+          text: { enabled: true },
+          divider: { enabled: true },
+          image: { enabled: true, usageLimit: 2 },
+          button: { enabled: false },
+          social: { enabled: false },
+          video: { enabled: false },
+          form: { enabled: false },
+          menu: { enabled: false },
+          timer: { enabled: false },
+          html: { enabled: false }
+        }
+      };
+
+      if (projectId) opts.projectId = projectId;
+      unlayer.init(opts);
+
+      unlayer.addEventListener("editor:ready", async function(){
+        try{
+          unlayer.setMergeTags(MERGE_TAGS);
+          setStatus("Loading saved layout…");
+          await loadSavedIntoEditor();
+          setStatus("Ready");
+        }catch(e){
+          console.error(e);
+          setStatus("Ready (no saved layout yet)");
+        }
+      });
+    }
+
+    document.getElementById("btnSave").addEventListener("click", saveTemplate);
+    document.getElementById("btnReload").addEventListener("click", async () => {
+      try{
+        setStatus("Reloading…");
+        await loadSavedIntoEditor();
+        setStatus("Ready");
+      }catch(e){
+        console.error(e);
+        setStatus("Reload failed");
+      }
+    });
+
+    initEditor();
+  </script>
+</body>
+</html>
