@@ -14,6 +14,7 @@
         <h2 style="margin:0;">List Of Artworks</h2>
         <div class="header-actions">
           <a class="btn" href="{{ url_for('artworks.add_artwork') }}">Add artwork</a>
+          <button class="btn" id="printSelectedBtn" type="button" disabled>Print selected</button>
           <button class="btn" id="printBtn" type="button">Print page</button>
         </div>
       </div>
@@ -202,6 +203,7 @@
         const hasSelection = selected.length > 0;
         selectedCount.textContent = selected.length;
         if (bulkEditSection) bulkEditSection.style.display = hasSelection ? '' : 'none';
+        if (printSelectedBtn) printSelectedBtn.disabled = !hasSelection;
       }
 
       function apply(){
@@ -299,6 +301,19 @@
         updateBulkUI();
       });
 
+      const printSelectedBtn = document.getElementById('printSelectedBtn');
+      function openPrintSelected() {
+        const selected = getSelectedCheckboxes();
+        if (selected.length === 0) {
+          alert('Select at least one artwork to print.');
+          return;
+        }
+        const params = new URLSearchParams();
+        selected.forEach(cb => params.append('ids', cb.value));
+        const url = '{{ url_for("certificates.print_designer_pdf") }}' + '?' + params.toString();
+        window.open(url, '_blank');
+      }
+
       function reset(){
         q.value = '';
         fMedium.value = '';
@@ -315,6 +330,7 @@
 
       if (resetBtn) resetBtn.addEventListener('click', reset);
       if (printBtn) printBtn.addEventListener('click', function(){ window.print(); });
+      if (printSelectedBtn) printSelectedBtn.addEventListener('click', openPrintSelected);
 
       apply();
     })();
