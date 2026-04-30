@@ -72,18 +72,18 @@
             <div class="v">
               {% if artwork.for_sale %}
                 Yes
-                {% if artwork.price %}
-                  <div style="font-size:13px; color:#666; margin-top:4px;">
-                    {% if artwork.exc_vat is not none %}
-                      <div>Price (exc. VAT): €{{ "{:,.2f}".format(artwork.exc_vat) }}</div>
-                      <div>Price (inc. VAT 6%): €{{ "{:,.2f}".format(artwork.inc_vat) }}</div>
-                    {% else %}
-                      {{ artwork.price }}
-                    {% endif %}
-                  </div>
-                {% endif %}
               {% else %}
                 No
+              {% endif %}
+              {% if artwork.price %}
+                <div style="font-size:13px; color:#666; margin-top:4px;">
+                  {% if artwork.exc_vat is not none %}
+                    <div>Price (exc. VAT): €{{ "{:,.2f}".format(artwork.exc_vat) }}</div>
+                    <div>Price (inc. VAT 6%): €{{ "{:,.2f}".format(artwork.inc_vat) }}</div>
+                  {% else %}
+                    {{ artwork.price }}
+                  {% endif %}
+                </div>
               {% endif %}
             </div>
 
