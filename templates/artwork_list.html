@@ -90,7 +90,7 @@
       {% if artworks and artworks|length > 0 %}
         <div class="items" id="items">
           {% for artwork in artworks %}
-            <div class="row"
+            <div class="row" draggable="true"
                  data-artwork-id="{{ artwork.id }}"
                  data-medium="{{ (artwork.medium or '')|lower|e }}"
                  data-year="{{ (artwork.year or '')|lower|e }}"
@@ -331,6 +331,84 @@
       if (resetBtn) resetBtn.addEventListener('click', reset);
       if (printBtn) printBtn.addEventListener('click', function(){ window.print(); });
       if (printSelectedBtn) printSelectedBtn.addEventListener('click', openPrintSelected);
+
+      // Drag and drop reordering
+      let draggedElement = null;
+
+      function handleDragStart(e) {
+        draggedElement = this;
+        this.style.opacity = '0.5';
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/html', this.outerHTML);
+      }
+
+      function handleDragOver(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        return false;
+      }
+
+      function handleDragEnter(e) {
+        this.classList.add('drag-over');
+      }
+
+      function handleDragLeave(e) {
+        this.classList.remove('drag-over');
+      }
+
+      function handleDrop(e) {
+        e.stopPropagation();
+        e.preventDefault();
+
+        if (draggedElement !== this) {
+          // Reorder the DOM elements
+          const allRows = Array.from(items.querySelectorAll('.row'));
+          const draggedIndex = allRows.indexOf(draggedElement);
+          const targetIndex = allRows.indexOf(this);
+
+          if (draggedIndex < targetIndex) {
+            this.parentNode.insertBefore(draggedElement, this.nextSibling);
+          } else {
+            this.parentNode.insertBefore(draggedElement, this);
+          }
+
+          // Collect new order of artwork IDs
+          const newOrder = Array.from(items.querySelectorAll('.row')).map(row => 
+            parseInt(row.dataset.artworkId, 10)
+          );
+
+          // Send to server
+          fetch('{{ url_for("artworks.reorder_artworks") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ artwork_ids: newOrder })
+          }).catch(error => {
+            console.error('Error reordering artworks:', error);
+            // Revert on error by reloading
+            location.reload();
+          });
+        }
+
+        this.classList.remove('drag-over');
+        return false;
+      }
+
+      function handleDragEnd(e) {
+        this.style.opacity = '';
+        items.querySelectorAll('.row').forEach(row => {
+          row.classList.remove('drag-over');
+        });
+      }
+
+      // Add drag and drop event listeners to rows
+      document.querySelectorAll('.row').forEach(row => {
+        row.addEventListener('dragstart', handleDragStart);
+        row.addEventListener('dragover', handleDragOver);
+        row.addEventListener('dragenter', handleDragEnter);
+        row.addEventListener('dragleave', handleDragLeave);
+        row.addEventListener('drop', handleDrop);
+        row.addEventListener('dragend', handleDragEnd);
+      });
 
       apply();
     })();

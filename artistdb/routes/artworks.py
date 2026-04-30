@@ -26,7 +26,7 @@ def artwork_list():
     """List artworks with optional status filter (working / for_sale / sold)."""
     status = (request.args.get("status") or "").strip().lower()
 
-    q = Artwork.query.order_by(Artwork.created_at.desc())
+    q = Artwork.query.order_by(Artwork.sort_order.desc(), Artwork.created_at.desc())
     if status in ["working", "for_sale", "sold"]:
         q = q.filter(Artwork.status == status)
 
@@ -165,6 +165,30 @@ def delete_artwork(artwork_id):
     db.session.delete(artwork)
     db.session.commit()
     return redirect(url_for("artworks.artwork_list"))
+
+
+@bp.route("/artworks/reorder", methods=["POST"])
+def reorder_artworks():
+    """
+    Update the sort order of artworks via drag-and-drop.
+    Expects JSON: { artwork_ids: [id1, id2, id3, ...] }
+    """
+    data = request.get_json()
+    if not data or not data.get("artwork_ids"):
+        return jsonify({"error": "Missing artwork_ids"}), 400
+
+    try:
+        artwork_ids = data["artwork_ids"]
+        # Assign sort_order based on position in the list (higher values = higher priority)
+        for index, artwork_id in enumerate(artwork_ids):
+            artwork = Artwork.query.get(artwork_id)
+            if artwork:
+                artwork.sort_order = len(artwork_ids) - index
+        db.session.commit()
+        return jsonify({"success": True}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
 
 
 @bp.route("/artworks/bulk-update", methods=["POST"])

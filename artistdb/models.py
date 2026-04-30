@@ -37,6 +37,7 @@ class Artwork(db.Model):
     image_filenames = db.Column(db.Text)
     certificate_image_filename = db.Column(db.String(255))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    sort_order = db.Column(db.Integer, default=0)
 
     @property
     def images(self):

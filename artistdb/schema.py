@@ -21,6 +21,9 @@ def ensure_artwork_status_column():
     if "certificate_image_filename" not in col_names:
         db.session.execute(text("ALTER TABLE artwork ADD COLUMN certificate_image_filename TEXT"))
 
+    if "sort_order" not in col_names:
+        db.session.execute(text("ALTER TABLE artwork ADD COLUMN sort_order INTEGER DEFAULT 0"))
+
     if "status" not in col_names:
         if "for_sale" in col_names:
             db.session.execute(text("""

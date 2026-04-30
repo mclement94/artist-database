@@ -361,6 +361,7 @@ a {
       background:#fff;
     }
     .item:hover{ border-color: blue; }
+    .row.drag-over .item { border-color: #007bff; background: #f8f9fa; }
     .thumb{
       width:86px; height:86px;
       background:red;
