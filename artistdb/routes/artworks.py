@@ -4,6 +4,7 @@ Artwork CRUD + listing.
 Kept clean by calling services for uploads and "box" location.
 """
 
+import json
 import os
 from flask import Blueprint, current_app, jsonify, redirect, render_template, request, send_from_directory, url_for
 
@@ -43,14 +44,20 @@ def artwork_detail(artwork_id):
 @bp.route("/add-artwork", methods=["GET", "POST"])
 def add_artwork():
     if request.method == "POST":
-        image = request.files.get("image")
-        image_filename = None
+        images = [f for f in request.files.getlist("images") if f and f.filename]
+        if not images:
+            image = request.files.get("image")
+            if image and image.filename:
+                images = [image]
 
-        if image and image.filename:
-            allowed = current_app.config["ALLOWED_ARTWORK_EXTENSIONS"]
+        image_filenames = []
+        allowed = current_app.config["ALLOWED_ARTWORK_EXTENSIONS"]
+        for image in images:
             if not allowed_ext(image.filename, allowed):
                 return "Only JPG/JPEG/PNG allowed", 400
-            image_filename = save_upload(image, current_app.config["UPLOAD_FOLDER"])
+            image_filenames.append(save_upload(image, current_app.config["UPLOAD_FOLDER"]))
+
+        certificate_image_filename = image_filenames[0] if image_filenames else None
 
         artwork = Artwork(
             title=request.form["title"],
@@ -65,7 +72,9 @@ def add_artwork():
             for_sale=(request.form.get("for_sale") == "yes"),
             price=request.form.get("price"),
             notes=request.form.get("notes"),
-            image_filename=image_filename,
+            image_filename=certificate_image_filename,
+            image_filenames=json.dumps(image_filenames) if image_filenames else None,
+            certificate_image_filename=certificate_image_filename,
         )
         db.session.add(artwork)
         db.session.commit()
@@ -92,12 +101,29 @@ def edit_artwork(artwork_id):
         artwork.price = request.form.get("price")
         artwork.notes = request.form.get("notes")
 
-        image = request.files.get("image")
-        if image and image.filename:
-            allowed = current_app.config["ALLOWED_ARTWORK_EXTENSIONS"]
+        existing_images = artwork.images
+        new_files = [f for f in request.files.getlist("images") if f and f.filename]
+        if not new_files:
+            image = request.files.get("image")
+            if image and image.filename:
+                new_files = [image]
+
+        allowed = current_app.config["ALLOWED_ARTWORK_EXTENSIONS"]
+        for image in new_files:
             if not allowed_ext(image.filename, allowed):
                 return "Only JPG/JPEG/PNG allowed", 400
-            artwork.image_filename = save_upload(image, current_app.config["UPLOAD_FOLDER"])
+            existing_images.append(save_upload(image, current_app.config["UPLOAD_FOLDER"]))
+
+        if existing_images:
+            artwork.images = existing_images
+
+        selected_certificate = request.form.get("certificate_image_filename")
+        if selected_certificate and selected_certificate in artwork.images:
+            artwork.certificate_image_filename = selected_certificate
+        elif not artwork.certificate_image_filename and artwork.images:
+            artwork.certificate_image_filename = artwork.images[0]
+
+        artwork.image_filename = artwork.certificate_image_filename or (artwork.images[0] if artwork.images else None)
 
         db.session.commit()
         return redirect(url_for("artworks.artwork_detail", artwork_id=artwork.id))
@@ -112,10 +138,10 @@ def delete_artwork(artwork_id):
     # delete related logs first (no cascade configured)
     LocationLog.query.filter_by(artwork_id=artwork.id).delete()
 
-    # delete uploaded image file (optional)
-    if artwork.image_filename:
+    # delete uploaded image files (optional)
+    for filename in artwork.images:
         try:
-            path = os.path.join(current_app.config["UPLOAD_FOLDER"], artwork.image_filename)
+            path = os.path.join(current_app.config["UPLOAD_FOLDER"], filename)
             if os.path.isfile(path):
                 os.remove(path)
         except Exception:

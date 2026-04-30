@@ -24,10 +24,27 @@
             {% endif %}
           </div>
 
+          {% if artwork.images|length > 1 %}
+            <div class="muted" style="margin-top:10px;">
+              Certificate image shown above. Additional uploaded images are displayed below.
+            </div>
+          {% endif %}
+
           <div class="badges">
             <span class="badge">Artwork ID: {{ artwork.id }}</span>
             <span class="badge">Created: {{ artwork.created_at.strftime('%Y-%m-%d') }}</span>
           </div>
+
+          {% if artwork.images|length > 1 %}
+            <div class="section" style="margin-top:14px;">
+              <div class="k" style="margin-bottom:6px;">Other uploaded images</div>
+              <div class="v" style="display:flex; flex-wrap:wrap; gap:10px;">
+                {% for filename in artwork.images if filename != artwork.image_filename %}
+                  <img src="{{ url_for('artworks.uploaded_file', filename=filename) }}" alt="Artwork image" style="max-width:120px; border-radius:12px; border:1px solid #ddd;">
+                {% endfor %}
+              </div>
+            </div>
+          {% endif %}
         </div>
 
         <!-- Right: metadata -->

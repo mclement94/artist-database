@@ -1,10 +1,11 @@
 # artistdb/services/schema.py
+import json
 from sqlalchemy import text
 from .extensions import db
 
 def ensure_artwork_status_column():
     """
-    Adds artwork.status column if it's missing (SQLite schema migration-lite).
+    Adds artwork.status and image columns if they are missing.
     Safe to run on every startup.
     """
     # SQLite: PRAGMA table_info(table_name) gives columns
@@ -13,7 +14,14 @@ def ensure_artwork_status_column():
 
     if "status" not in col_names:
         db.session.execute(text("ALTER TABLE artwork ADD COLUMN status TEXT"))
-        # Optional: backfill status based on for_sale if that exists
+
+    if "image_filenames" not in col_names:
+        db.session.execute(text("ALTER TABLE artwork ADD COLUMN image_filenames TEXT"))
+
+    if "certificate_image_filename" not in col_names:
+        db.session.execute(text("ALTER TABLE artwork ADD COLUMN certificate_image_filename TEXT"))
+
+    if "status" not in col_names:
         if "for_sale" in col_names:
             db.session.execute(text("""
                 UPDATE artwork
@@ -29,4 +37,17 @@ def ensure_artwork_status_column():
                 SET status = 'working'
                 WHERE status IS NULL
             """))
-        db.session.commit()
+
+    if "image_filename" in col_names:
+        rows = db.session.execute(text("SELECT id, image_filename FROM artwork WHERE image_filename IS NOT NULL")).fetchall()
+        for artwork_id, filename in rows:
+            if filename:
+                image_list = json.dumps([filename])
+                db.session.execute(text("""
+                    UPDATE artwork
+                    SET image_filenames = :images,
+                        certificate_image_filename = COALESCE(certificate_image_filename, :selected)
+                    WHERE id = :id
+                """), {"images": image_list, "selected": filename, "id": artwork_id})
+
+    db.session.commit()

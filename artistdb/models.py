@@ -8,6 +8,7 @@ Rule of thumb:
 - models.py just defines data structure + relationships
 """
 
+import json
 from datetime import datetime
 
 from .extensions import db
@@ -33,7 +34,40 @@ class Artwork(db.Model):
     notes = db.Column(db.Text)
 
     image_filename = db.Column(db.String(255))
+    image_filenames = db.Column(db.Text)
+    certificate_image_filename = db.Column(db.String(255))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    @property
+    def images(self):
+        if self.image_filenames:
+            try:
+                value = json.loads(self.image_filenames)
+            except ValueError:
+                return []
+            return [str(x) for x in value if x]
+
+        if self.image_filename:
+            return [self.image_filename]
+
+        return []
+
+    @images.setter
+    def images(self, value):
+        if value is None:
+            self.image_filenames = None
+            return
+
+        self.image_filenames = json.dumps([str(x) for x in value if x])
+
+    @property
+    def certificate_image(self):
+        if self.certificate_image_filename:
+            return self.certificate_image_filename
+        if self.image_filename:
+            return self.image_filename
+        images = self.images
+        return images[0] if images else None
 
 
 class LocationLog(db.Model):

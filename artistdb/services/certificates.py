@@ -79,14 +79,19 @@ def artwork_image_data_uri(artwork: Artwork, upload_folder: str) -> str:
     Returns a data: URI for the artwork image.
     Why? Because Playwright can render HTML without fetching external URLs.
     """
-    if not artwork.image_filename:
+    filename = artwork.certificate_image_filename or artwork.image_filename
+    if not filename and hasattr(artwork, "images"):
+        images = artwork.images
+        filename = images[0] if images else None
+
+    if not filename:
         return ""
 
-    path = os.path.join(upload_folder, artwork.image_filename)
+    path = os.path.join(upload_folder, filename)
     if not os.path.isfile(path):
         return ""
 
-    ext = artwork.image_filename.rsplit(".", 1)[1].lower()
+    ext = filename.rsplit(".", 1)[1].lower()
     mime = "image/jpeg" if ext in ("jpg", "jpeg") else "image/png"
 
     with open(path, "rb") as f:
