@@ -70,6 +70,24 @@ class Artwork(db.Model):
         images = self.images
         return images[0] if images else None
 
+    @property
+    def exc_vat(self):
+        """Price excluding VAT (6%)"""
+        if not self.price:
+            return None
+        try:
+            return float(self.price.replace('€', '').replace(',', '').strip())
+        except (ValueError, AttributeError):
+            return None
+
+    @property
+    def inc_vat(self):
+        """Price including VAT (6%)"""
+        exc = self.exc_vat
+        if exc is None:
+            return None
+        return exc * 1.06
+
 
 class LocationLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)

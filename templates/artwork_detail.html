@@ -74,10 +74,9 @@
                 Yes
                 {% if artwork.price %}
                   <div style="font-size:13px; color:#666; margin-top:4px;">
-                    {% set price_num = artwork.price | float(0) %}
-                    {% if price_num > 0 %}
-                      <div>Price (exc. VAT): {{ "€{:,.2f}".format(price_num) }}</div>
-                      <div>Price (inc. VAT 6%): {{ "€{:,.2f}".format(price_num * 1.06) }}</div>
+                    {% if artwork.exc_vat is not none %}
+                      <div>Price (exc. VAT): €{{ "{:,.2f}".format(artwork.exc_vat) }}</div>
+                      <div>Price (inc. VAT 6%): €{{ "{:,.2f}".format(artwork.inc_vat) }}</div>
                     {% else %}
                       {{ artwork.price }}
                     {% endif %}
