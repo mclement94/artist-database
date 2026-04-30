@@ -19,6 +19,7 @@ from ..services.certificates import (
     get_or_create_unlayer_template,
     merge_unlayer_html,
     pdf_from_html_with_playwright,
+    render_multiple_artworks_html,
     template_json_for_editor,
     wrap_full_html,
 )
@@ -81,6 +82,46 @@ def certificate_render(artwork_id):
         upload_folder=current_app.config["UPLOAD_FOLDER"],
     )
     return Response(wrap_full_html(merged), mimetype="text/html")
+
+
+@bp.route("/artworks/print-selected")
+def multi_artwork_pdf():
+    ids = request.args.get("ids", "").strip()
+    if not ids:
+        return Response("No artworks selected.", status=400)
+
+    artwork_ids = [int(x) for x in ids.split(",") if x.strip().isdigit()]
+    if not artwork_ids:
+        return Response("No valid artwork IDs provided.", status=400)
+
+    artworks = Artwork.query.filter(Artwork.id.in_(artwork_ids)).order_by(Artwork.created_at.desc()).all()
+    if not artworks:
+        return Response("No selected artworks found.", status=404)
+
+    try:
+        html = render_multiple_artworks_html(
+            artworks,
+            artist_name=current_app.config["ARTIST_NAME"],
+            upload_folder=current_app.config["UPLOAD_FOLDER"],
+        )
+        full_html = wrap_full_html(html)
+        pdf_bytes = pdf_from_html_with_playwright(full_html)
+    except Exception as e:
+        current_app.logger.exception("Multi artwork PDF generation failed")
+        return Response(
+            "Multi artwork PDF generation failed.\n\n"
+            "Check logs for the full traceback.\n\n"
+            f"Error: {html_escape(str(e))}\n",
+            mimetype="text/plain",
+            status=500,
+        )
+
+    return send_file(
+        io.BytesIO(pdf_bytes),
+        mimetype="application/pdf",
+        as_attachment=False,
+        download_name="artwork_selection.pdf",
+    )
 
 
 # Keep both URLs (same as your original)
