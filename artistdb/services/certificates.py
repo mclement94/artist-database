@@ -54,6 +54,19 @@ def merge_unlayer_print_html(template_html: str, artwork: Artwork, *, artist_nam
     Replace placeholders in the print-layout template with artwork values.
     """
     img_uri = artwork_image_data_uri(artwork, upload_folder)
+    images = artwork.images
+    image_uris = []
+    for filename in images:
+        img_path = os.path.join(upload_folder, filename)
+        if os.path.isfile(img_path):
+            with open(img_path, "rb") as f:
+                b64 = base64.b64encode(f.read()).decode("ascii")
+            ext = filename.rsplit(".", 1)[1].lower()
+            mime = "image/jpeg" if ext in ("jpg", "jpeg") else "image/png"
+            image_uris.append(f"data:{mime};base64,{b64}")
+        else:
+            image_uris.append("")
+
     values = {
         "artist_name": _safe_text(artist_name),
         "artwork_title": _safe_text(artwork.title),
@@ -63,6 +76,11 @@ def merge_unlayer_print_html(template_html: str, artwork: Artwork, *, artist_nam
         "edition_info": _safe_text(artwork.edition_info or "Unique"),
         "artwork_id": _safe_text(artwork.id),
         "artwork_image_url": str(html_escape(img_uri or "")),
+        "artwork_image_url_1": image_uris[0] if len(image_uris) > 0 else "",
+        "artwork_image_url_2": image_uris[1] if len(image_uris) > 1 else "",
+        "artwork_image_url_3": image_uris[2] if len(image_uris) > 2 else "",
+        "artwork_image_url_4": image_uris[3] if len(image_uris) > 3 else "",
+        "artwork_image_url_5": image_uris[4] if len(image_uris) > 4 else "",
         "series": _safe_text(artwork.series),
         "status": _safe_text(artwork.status),
         "price": _safe_text(artwork.price),
